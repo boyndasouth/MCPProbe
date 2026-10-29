@@ -197,3 +197,29 @@ def test_broken_catalog_exits_3(monkeypatch: pytest.MonkeyPatch) -> None:
     data = Path(__file__).parent / "data" / "checks" / "invalid"
     monkeypatch.setattr(cli, "load_catalog", lambda: catalog.load_catalog(data))
     assert runner.invoke(app, ["checks", "list"]).exit_code == ExitCode.CONFIG_INVALID
+
+
+def test_silent_server_is_flagged(tmp_path: Path, stdio_argv: list[str]) -> None:
+    script = tmp_path / "messages.jsonl"
+    script.write_text('{"jsonrpc":"2.0","id":1,"method":"silent"}\n', encoding="utf-8")
+    recording = tmp_path / "rec.json"
+    command = " ".join(f'"{part}"' for part in stdio_argv)
+    recorded = runner.invoke(
+        app,
+        [
+            "record",
+            "--stdio",
+            command,
+            "--send",
+            str(script),
+            "-o",
+            str(recording),
+            "--timeout",
+            "0.5",
+        ],
+    )
+    assert recorded.exit_code == 0
+    assert "answered nothing" in recorded.output
+    replayed = runner.invoke(app, ["replay", str(recording), "--timeout", "0.5"])
+    assert replayed.exit_code == ExitCode.FAILED
+    assert "trivially" in replayed.output

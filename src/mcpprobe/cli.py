@@ -176,6 +176,7 @@ def record(
     """Send scripted messages to a server and save every byte (developer tool)."""
     from mcpprobe.engine.record import record_http, record_stdio
     from mcpprobe.transport.errors import TransportError
+    from mcpprobe.transport.frames import StdioFrame
     from mcpprobe.transport.process import split_command
 
     if (stdio is None) == (http is None):
@@ -212,6 +213,15 @@ def record(
     )
     for problem in result.problems:
         err.print(f"[yellow]warning:[/] {problem}")
+    if result.sent and not result.answered and result.problems:
+        stderr_lines = [
+            f.data.decode("utf-8", "replace").rstrip()
+            for f in result.recording.frames
+            if isinstance(f, StdioFrame) and f.stream == "stderr"
+        ]
+        err.print("[yellow]the server answered nothing.[/] Its stderr said:", highlight=False)
+        for line in stderr_lines[-10:] or ["(nothing)"]:
+            err.print(f"  {line}", markup=False, highlight=False)
 
 
 @app.command()
@@ -260,6 +270,13 @@ def replay(
     if output is not None:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(result.replayed.dumps(), encoding="utf-8")
+    if result.matched and result.silent:
+        err.print(
+            "[yellow]replay matched, but only trivially[/]: the server sent no output in "
+            "the original recording, so there was nothing to compare. Check the server "
+            "starts and answers (see the recording's stderr frames)."
+        )
+        raise typer.Exit(int(ExitCode.FAILED))
     if result.matched:
         out.print(f"[green]replay matched[/]: {len(result.replayed.frames)} frames")
         return

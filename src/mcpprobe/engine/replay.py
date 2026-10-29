@@ -81,6 +81,22 @@ class ReplayResult:
     def matched(self) -> bool:
         return not self.differences
 
+    @property
+    def silent(self) -> bool:
+        """The client sent something but the server never answered, in the original.
+
+        A replay of such a recording "matches" trivially (nothing == nothing),
+        which says nothing about the server; callers should say so.
+        """
+        frames = self.original.frames
+        sent = any(isinstance(f, HttpRequestFrame) for f in frames) or bool(
+            self.original.stdio_frames("stdin")
+        )
+        answered = any(isinstance(f, HttpResponseFrame) for f in frames) or bool(
+            self.original.stdio_frames("stdout")
+        )
+        return sent and not answered
+
 
 def _preview(data: bytes) -> str:
     text = data.decode("utf-8", "replace")

@@ -147,7 +147,8 @@ async def test_close_kills_grandchildren(stdio_argv: list[str]) -> None:
 
 def test_split_command_and_resolve() -> None:
     assert split_command('python -m "my server"') == ["python", "-m", "my server"]
-    assert resolve_argv(["python3", "-V"])[0].endswith(("python3", "python3.exe"))
+    # Windows paths are case-insensitive and may come back as python3.EXE.
+    assert resolve_argv(["python3", "-V"])[0].lower().endswith(("python3", "python3.exe"))
     assert resolve_argv(["./not-on-path"]) == ["./not-on-path"]
     with pytest.raises(ValueError, match="empty"):
         resolve_argv([])
