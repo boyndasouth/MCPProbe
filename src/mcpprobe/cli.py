@@ -1,7 +1,8 @@
-"""Command-line entry point: ``mcpprobe run | replay | checks``."""
+"""Command-line entry point: ``mcpprobe run | record | replay | checks``."""
 
 from __future__ import annotations
 
+import asyncio
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -120,16 +121,152 @@ def run(
     raise _fail("the runner is not implemented yet (milestone M0)", ExitCode.PROBE_ERROR)
 
 
+def _parse_headers(items: list[str] | None) -> list[tuple[str, str]]:
+    headers: list[tuple[str, str]] = []
+    for item in items or []:
+        name, sep, value = item.partition(":")
+        if not sep or not name.strip():
+            raise _fail(f"--header {item!r} must look like 'Name: value'", ExitCode.CONFIG_INVALID)
+        headers.append((name.strip(), value.strip()))
+    return headers
+
+
+def _parse_env(items: list[str] | None) -> dict[str, str]:
+    env: dict[str, str] = {}
+    for item in items or []:
+        key, sep, value = item.partition("=")
+        if not sep or not key:
+            raise _fail(f"--env {item!r} must look like KEY=VALUE", ExitCode.CONFIG_INVALID)
+        env[key] = value
+    return env
+
+
+def _read_messages(path: Path) -> list[bytes]:
+    if not path.is_file():
+        raise _fail(f"messages file not found: {path}", ExitCode.CONFIG_INVALID)
+    lines = path.read_bytes().splitlines()
+    messages = [line for line in lines if line.strip() and not line.lstrip().startswith(b"#")]
+    if not messages:
+        raise _fail(
+            f"{path} has no messages (one JSON-RPC message per line)", ExitCode.CONFIG_INVALID
+        )
+    return messages
+
+
+@app.command()
+def record(
+    send: Annotated[
+        Path, typer.Option(help="File with one JSON-RPC message per line, sent as-is.")
+    ],
+    output: Annotated[Path, typer.Option("-o", "--output", help="Where to save the recording.")],
+    stdio: Annotated[str | None, typer.Option(help="Command that starts a stdio server.")] = None,
+    http: Annotated[str | None, typer.Option(help="URL of a Streamable HTTP endpoint.")] = None,
+    header: Annotated[
+        list[str] | None, typer.Option(help="Extra HTTP header, 'Name: value'. Repeatable.")
+    ] = None,
+    env: Annotated[
+        list[str] | None, typer.Option(help="Env var for a stdio server, KEY=VALUE. Masked.")
+    ] = None,
+    derive_headers: Annotated[
+        bool,
+        typer.Option(help="Add MCP-Protocol-Version, Mcp-Method and Mcp-Name from each body."),
+    ] = True,
+    timeout: Annotated[float, typer.Option(min=0.1, help="Seconds to wait per response.")] = 10.0,
+) -> None:
+    """Send scripted messages to a server and save every byte (developer tool)."""
+    from mcpprobe.engine.record import record_http, record_stdio
+    from mcpprobe.transport.errors import TransportError
+    from mcpprobe.transport.process import split_command
+
+    if (stdio is None) == (http is None):
+        raise _fail("pass exactly one of --stdio or --http", ExitCode.CONFIG_INVALID)
+    if header and http is None:
+        raise _fail("--header only applies to --http servers", ExitCode.CONFIG_INVALID)
+    if env and stdio is None:
+        raise _fail("--env only applies to --stdio servers", ExitCode.CONFIG_INVALID)
+    headers = _parse_headers(header)
+    env_vars = _parse_env(env)
+    messages = _read_messages(send)
+
+    try:
+        if stdio is not None:
+            argv = split_command(stdio)
+            if not argv:
+                raise _fail("--stdio command is empty", ExitCode.CONFIG_INVALID)
+            result = asyncio.run(record_stdio(argv, messages, env=env_vars, timeout=timeout))
+        else:
+            assert http is not None
+            result = asyncio.run(
+                record_http(
+                    http, messages, headers=headers, derive_headers=derive_headers, timeout=timeout
+                )
+            )
+    except TransportError as exc:
+        raise _fail(str(exc), ExitCode.PROBE_ERROR) from exc
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(result.recording.dumps(), encoding="utf-8")
+    out.print(
+        f"sent {result.sent}, answered {result.answered}, "
+        f"{len(result.recording.frames)} frames saved to {output}"
+    )
+    for problem in result.problems:
+        err.print(f"[yellow]warning:[/] {problem}")
+
+
 @app.command()
 def replay(
     case: Annotated[
         Path, typer.Argument(help="Saved case, e.g. .mcpprobe/cases/FUZZ-003-7f2a.json")
     ],
+    header: Annotated[
+        list[str] | None,
+        typer.Option(help="Value for a header masked in the recording. Repeatable."),
+    ] = None,
+    env: Annotated[
+        list[str] | None, typer.Option(help="Value for an env var the server needs, KEY=VALUE.")
+    ] = None,
+    timeout: Annotated[float, typer.Option(min=0.1, help="Seconds to wait per step.")] = 10.0,
+    output: Annotated[
+        Path | None, typer.Option("-o", "--output", help="Save the replayed session here.")
+    ] = None,
 ) -> None:
-    """Replay a saved failing case byte for byte."""
+    """Replay a saved case byte for byte and report any difference."""
+    from pydantic import ValidationError
+
+    from mcpprobe.engine.replay import ReplayError
+    from mcpprobe.engine.replay import replay as replay_recording
+    from mcpprobe.transport.errors import TransportError
+    from mcpprobe.transport.frames import Recording
+
     if not case.is_file():
         raise _fail(f"case not found: {case}", ExitCode.CONFIG_INVALID)
-    raise _fail("replay is not implemented yet (milestone M0)", ExitCode.PROBE_ERROR)
+    try:
+        recording = Recording.loads(case.read_bytes())
+    except ValidationError as exc:
+        raise _fail(f"{case} is not a valid recording: {exc}", ExitCode.CONFIG_INVALID) from exc
+    headers = _parse_headers(header)
+    env_vars = _parse_env(env)
+
+    try:
+        result = asyncio.run(
+            replay_recording(recording, headers=headers, env=env_vars, timeout=timeout)
+        )
+    except ReplayError as exc:
+        raise _fail(str(exc), ExitCode.CONFIG_INVALID) from exc
+    except TransportError as exc:
+        raise _fail(str(exc), ExitCode.PROBE_ERROR) from exc
+
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(result.replayed.dumps(), encoding="utf-8")
+    if result.matched:
+        out.print(f"[green]replay matched[/]: {len(result.replayed.frames)} frames")
+        return
+    err.print(f"[red]replay differs[/] in {len(result.differences)} place(s):")
+    for difference in result.differences:
+        err.print(f"  - {difference}", markup=False, highlight=False)
+    raise typer.Exit(int(ExitCode.FAILED))
 
 
 @checks_app.command("list")

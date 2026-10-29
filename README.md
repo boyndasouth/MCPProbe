@@ -3,9 +3,10 @@
 Tells an MCP server author, in one run, whether their server is spec-compliant,
 robust to bad input, and usable by a real model.
 
-> **Status: pre-alpha (milestone M0).** The CLI, check catalog loader and seed
-> handling exist; the wire client and runner are in progress. `mcpprobe run`
-> currently exits with code 2.
+> **Status: pre-alpha (milestone M0).** The wire client (stdio, Streamable
+> HTTP, SSE), byte recorder and replay work. Suites and the runner are not
+> built yet, so `mcpprobe run` exits with code 2. Use `record` and `replay`
+> to exercise real servers today.
 
 Targets the stateless **2026-07-28** revision plus the legacy
 `initialize`-era revisions (2025-11-25, 2025-06-18), and detects dual-era
@@ -28,6 +29,24 @@ mcpprobe checks explain CONF-006
 | 1 | At least one `error` finding |
 | 2 | Probe could not run (server didn't start, unreachable) |
 | 3 | Config or invocation invalid |
+
+## Try it on a real server today
+
+`record` sends a file of JSON-RPC messages (one per line, sent byte for byte)
+and saves every byte that crossed the wire. `replay` re-sends it to a fresh
+server and reports any difference.
+
+```bash
+mcpprobe record --stdio "npx -y @modelcontextprotocol/server-everything" \
+  --send examples/legacy-session.jsonl -o everything.json --timeout 60
+mcpprobe replay everything.json --timeout 60
+```
+
+For HTTP servers, `record --http URL` adds the `MCP-Protocol-Version`,
+`Mcp-Method` and `Mcp-Name` headers derived from each body (turn off with
+`--no-derive-headers`) and follows a legacy `Mcp-Session-Id`. Secrets from
+`--env` and sensitive `--header` values are masked in recordings; pass them
+again to `replay`.
 
 ## Suites
 
