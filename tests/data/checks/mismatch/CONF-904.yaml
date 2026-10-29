@@ -1,0 +1,7 @@
+id: CONF-901
+title: Example modern check (test data only)
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic#example
+transports: [http, stdio]
+description: Test fixture for the catalog loader. Not a real check.

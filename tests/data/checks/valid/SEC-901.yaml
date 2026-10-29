@@ -1,0 +1,7 @@
+id: SEC-901
+title: Example HTTP-only warning (test data only)
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports#example
+transports: [http]
+description: Test fixture for the catalog loader. Not a real check.
