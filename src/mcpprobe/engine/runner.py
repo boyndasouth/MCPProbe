@@ -224,6 +224,11 @@ class Runner:
             self._facts = await detect_era(
                 connection, self.liveness_timeout, self.startup_timeout, open_fresh=self._open
             )
+            if self._facts.auth_required:
+                raise ServerUnavailable(
+                    "the server requires authorization (HTTP 401); pass credentials with "
+                    "--header 'Authorization: Bearer <token>' (or the header your server expects)"
+                )
             if not await self.alive(connection):
                 detail = ""
                 stderr = getattr(getattr(connection, "stdio", None), "stderr_tail", None)

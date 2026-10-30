@@ -272,3 +272,10 @@ def test_reply_accessors() -> None:
     assert Reply(None).error is None
     assert encode(b"raw") == b"raw"
     assert encode({"a": "é"}) == '{"a":"é"}'.encode()
+
+
+async def test_http_server_requiring_auth_is_reported(http_url: str, tmp_path: Path) -> None:
+    # The test server answers 401 to a wrong Authorization header.
+    spec = HttpServer(http_url, (("Authorization", "Bearer wrong-token"),))
+    with pytest.raises(ServerUnavailable, match="requires authorization"):
+        await _runner(spec, tmp_path).run([])

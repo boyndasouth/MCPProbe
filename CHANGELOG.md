@@ -8,6 +8,11 @@ versioned and never silently reused.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-30
+
+Milestone M2: legacy and dual-era servers. Era detection verified against 10
+public MCP servers (14 configurations, stdio and HTTP).
+
 ### Added
 - Era detection classifies every server as modern, legacy, dual-era or
   unknown: `server/discover` first, then `initialize`, and a dual-era probe
@@ -23,6 +28,14 @@ versioned and never silently reused.
   and CONF-022 (info: outdated revision).
 - Reference fixture server: `--era legacy|dual`, with stateful legacy sessions
   over stdio and HTTP.
+- An HTTP server that answers 401 is reported as needing credentials (exit 2,
+  with a hint to pass `--header`) instead of as an unknown era.
+- CI type-checks Windows-only and macOS code paths too.
+
+### Fixed
+- Windows: servers started through a wrapper that exits early (`npx.cmd`,
+  `uvx`) left their real server process running after MCPProbe finished. Each
+  server now runs inside a Job Object that is killed as a whole.
 
 ### Changed
 - CONF-002 accepts any error for a request missing `protocolVersion` on a
@@ -71,5 +84,6 @@ reports and byte-for-byte replay of every failure.
 - Request metadata header helper for 2026-07-28 (`Mcp-Method`, `Mcp-Name`,
   Base64 sentinel encoding).
 
-[Unreleased]: https://github.com/boyndasouth/MCPProbe/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/boyndasouth/MCPProbe/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v0.2.0
 [0.1.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v0.1.0

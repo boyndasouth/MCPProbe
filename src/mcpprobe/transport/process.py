@@ -2,8 +2,9 @@
 
 Servers are often launched through wrappers (``npx``, ``uvx``, shell
 scripts), so killing only the direct child leaves the real server running.
-On POSIX the server gets its own process group; on Windows its own process
-group and ``taskkill /T`` takes the tree down.
+On POSIX the server gets its own process group. On Windows it joins a Job
+Object (see ``winjob.py``) that kills the whole tree, with ``taskkill /T`` as
+a fallback.
 """
 
 from __future__ import annotations
@@ -20,6 +21,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import asyncio
     from collections.abc import Sequence
+
+    from mcpprobe.transport.winjob import ProcessJob
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -53,16 +56,23 @@ def spawn_kwargs() -> dict[str, Any]:
     return {"start_new_session": True}
 
 
-def terminate_tree(process: asyncio.subprocess.Process, *, force: bool) -> None:
+def terminate_tree(
+    process: asyncio.subprocess.Process, *, force: bool, job: ProcessJob | None = None
+) -> None:
     """Send TERM (or KILL with ``force``) to the process and its descendants.
 
     Runs even after the direct child exited: a wrapper (``npx``, a shell
     script) can exit cleanly while the real server it spawned lives on and
     keeps our stdout pipe open.
     """
-    if IS_WINDOWS:  # pragma: no cover - Windows only
-        # Known gap: once the direct child is gone, taskkill /T cannot find
-        # its orphans. A Job Object would close it; tracked for M0 follow-up.
+    # sys.platform, not IS_WINDOWS: mypy narrows only on the literal check.
+    if sys.platform == "win32":  # pragma: no cover - Windows only
+        # The job reaches orphans whose wrapper already exited; taskkill /T
+        # covers the case where no job could be created.
+        if job is not None:
+            job.terminate()
+        if process.returncode is not None:
+            return
         subprocess.run(
             ["taskkill", "/T", "/F", "/PID", str(process.pid)],
             capture_output=True,
@@ -70,5 +80,7 @@ def terminate_tree(process: asyncio.subprocess.Process, *, force: bool) -> None:
         )
         return
     sig = signal.SIGKILL if force else signal.SIGTERM
-    with contextlib.suppress(ProcessLookupError, PermissionError):  # raced with exit
+    # Linux raises ProcessLookupError for a group that is gone; macOS raises
+    # PermissionError (EPERM) once the group leader has exited.
+    with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(process.pid, sig)

@@ -23,6 +23,7 @@ from mcpprobe.transport.errors import (
     TransportTimeout,
 )
 from mcpprobe.transport.process import resolve_argv, spawn_kwargs, terminate_tree
+from mcpprobe.transport.winjob import ProcessJob, new_job
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -64,6 +65,7 @@ class StdioTransport:
         self._stdout_count = 0
         self._stdout_done = False
         self._count_changed = asyncio.Condition()
+        self._job: ProcessJob = new_job()
         self.stderr_tail: deque[str] = deque(maxlen=STDERR_TAIL)
         """Last stderr lines, for error messages when the server dies."""
 
@@ -83,6 +85,7 @@ class StdioTransport:
             )
         except (OSError, ValueError) as exc:
             raise ServerStartError(f"could not start {self.argv[0]!r}: {exc}") from exc
+        self._job.assign(self._process.pid)
         assert self._process.stdout is not None
         assert self._process.stderr is not None
         self._readers = [
@@ -102,7 +105,7 @@ class StdioTransport:
                     process.stdin.close()
                 for force in (None, False, True):
                     if force is not None:
-                        terminate_tree(process, force=force)
+                        terminate_tree(process, force=force, job=self._job)
                     with contextlib.suppress(TimeoutError):
                         await asyncio.wait_for(process.wait(), grace)
                         break
@@ -110,7 +113,8 @@ class StdioTransport:
         finally:
             # Kill the whole tree even if we were cancelled (Ctrl+C) half-way
             # through, or the direct child exited but left descendants behind.
-            terminate_tree(process, force=True)
+            terminate_tree(process, force=True, job=self._job)
+            self._job.close()
             await self._stop_readers(grace)
         return process.returncode
 

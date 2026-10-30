@@ -58,6 +58,8 @@ class ServerFacts:
     """The DiscoverResult, when ``server/discover`` answered with one."""
     initialize: dict[str, Any] | None = None
     """The InitializeResult, when ``initialize`` answered with one."""
+    auth_required: bool = False
+    """The first request got HTTP 401: the server wants credentials first."""
 
     @property
     def capabilities_known(self) -> bool:
@@ -133,6 +135,8 @@ async def detect_era(
     reply = await _call(
         connection, request("server/discover", "mcpprobe-era-discover"), startup_timeout or timeout
     )
+    if reply is not None and reply.http_status == 401:
+        return ServerFacts(Era.UNKNOWN, auth_required=True)
     discover = _discover_result(reply)
     modern = discover is not None or (reply is not None and _modern_error(reply))
 

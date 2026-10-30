@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
 
@@ -17,6 +16,7 @@ from mcpprobe.transport.frames import ExitFrame
 from mcpprobe.transport.process import resolve_argv, split_command
 from mcpprobe.transport.recorder import Recorder
 from mcpprobe.transport.stdio import StdioTransport
+from tests.support.procs import pid_alive
 
 
 def _msg(method: str, mid: int | None = 1, **params: object) -> bytes:
@@ -130,19 +130,54 @@ async def test_close_escalates_when_stdin_is_ignored() -> None:
     assert await transport.close() == transport.returncode  # idempotent
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
+def _wait_dead(pid: int, seconds: float = 10) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if not pid_alive(pid):
+            return True
+        time.sleep(0.05)
+    return False
+
+
 async def test_close_kills_grandchildren(stdio_argv: list[str]) -> None:
     async with StdioTransport(stdio_argv, recorder=Recorder()) as transport:
         await transport.send_line(_msg("grandchild"))
         pid = json.loads(await transport.receive(5))["result"]["pid"]
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return
-        time.sleep(0.05)
-    pytest.fail("grandchild survived close()")
+        assert pid_alive(pid)
+    assert _wait_dead(pid), "grandchild survived close()"
+
+
+ORPHANING_WRAPPER = (
+    "import subprocess, sys\n"
+    "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'])\n"
+    "print(child.pid, flush=True)\n"
+)
+
+
+async def test_close_kills_orphans_of_a_wrapper_that_exited() -> None:
+    """The npx case: the wrapper exits, its child keeps our stdout pipe open.
+
+    POSIX process groups and the Windows Job Object must both still reach it.
+    """
+    transport = StdioTransport([sys.executable, "-c", ORPHANING_WRAPPER], recorder=Recorder())
+    await transport.start()
+    pid = int(await transport.receive(10))
+    assert await transport.wait_for_exit(10) == 0  # the wrapper is gone
+    assert pid_alive(pid)  # ...but its child lives on
+    await transport.close(grace=0.5)
+    assert _wait_dead(pid), "orphaned child survived close()"
+
+
+def test_job_is_inert_off_windows() -> None:
+    from mcpprobe.transport.winjob import ProcessJob, new_job
+
+    job = new_job()
+    if sys.platform != "win32":
+        assert type(job) is ProcessJob
+        assert job.assign(1) is False
+    job.terminate()
+    job.close()
+    job.close()  # idempotent
 
 
 def test_split_command_and_resolve() -> None:

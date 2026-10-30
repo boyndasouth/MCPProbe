@@ -3,7 +3,7 @@
 Tells an MCP server author, in one run, whether their server is spec-compliant,
 robust to bad input, and usable by a real model.
 
-> **Status: pre-alpha (M2 in progress).** 21 conformance checks over stdio and
+> **Status: v0.2.0, pre-alpha.** 21 conformance checks over stdio and
 > Streamable HTTP for the stateless **2026-07-28** revision *and* the legacy
 > `initialize` era (2025-11-25, 2025-06-18). Each server is classified as
 > modern, legacy, dual-era or unknown, and only the checks for the era(s) it
@@ -17,9 +17,9 @@ byte-for-byte replayable case, and the same seed always gives the same report.
 Requires Python 3.11+. No compiler needed on any platform.
 
 ```bash
-pipx install git+https://github.com/boyndasouth/MCPProbe@v0.1.0
+pipx install git+https://github.com/boyndasouth/MCPProbe@v0.2.0
 # or, inside a project
-uv add git+https://github.com/boyndasouth/MCPProbe@v0.1.0
+uv add git+https://github.com/boyndasouth/MCPProbe@v0.2.0
 ```
 
 ## Usage
@@ -138,7 +138,7 @@ every saved recording; pass them again to `replay`.
 |---|---|
 | M0 (done) | Raw wire client, recorder, replay, runner |
 | M1 (done, v0.1.0) | Conformance checks for 2026-07-28, JSON report |
-| M2 (in progress) | Legacy and dual-era detection and checks |
+| M2 (done, v0.2.0) | Legacy and dual-era detection and checks |
 | M3 | Schema fuzzing (FUZZ) and robustness (ROB) suites |
 | M4 | Security suite, SARIF/JUnit/HTML reports, GitHub Action, `--baseline` |
 | M5 | Model-in-the-loop usability evaluation (EVAL, opt-in) |
