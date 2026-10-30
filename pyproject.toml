@@ -1,6 +1,6 @@
 [project]
 name = "mcpprobe"
-version = "0.0.1"
+version = "0.1.0"
 description = "Conformance checker, schema fuzzer and tool-usability evaluator for MCP servers"
 readme = "README.md"
 license = "MIT"
@@ -43,8 +43,8 @@ eval = ["anthropic>=0.40"]
 mcpprobe = "mcpprobe.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/OWNER/mcpprobe"
-Issues = "https://github.com/OWNER/mcpprobe/issues"
+Homepage = "https://github.com/boyndasouth/MCPProbe"
+Issues = "https://github.com/boyndasouth/MCPProbe/issues"
 
 [dependency-groups]
 dev = [

@@ -107,6 +107,12 @@ def run(
         list[str] | None, typer.Option(help="Env var for a stdio server, KEY=VALUE. Masked.")
     ] = None,
     timeout: Annotated[float, typer.Option(min=0.1, help="Seconds allowed per case.")] = 10.0,
+    startup_timeout: Annotated[
+        float,
+        typer.Option(
+            min=0.1, help="Seconds to wait for the server's first answer (npx/uvx start-up)."
+        ),
+    ] = 30.0,
     cases_dir: Annotated[
         Path, typer.Option(help="Where failing cases are saved for replay.")
     ] = Path(".mcpprobe/cases"),
@@ -164,6 +170,7 @@ def run(
         case_timeout=timeout,
         keep_going=keep_going,
         allow_destructive=allow_destructive,
+        startup_timeout=startup_timeout,
     )
     try:
         result = asyncio.run(runner.run(plan))

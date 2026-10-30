@@ -42,6 +42,7 @@ BREAKS = {
     "CONF-017": "results carry no serverInfo",
     "CONF-018": "cacheable results carry no ttlMs/cacheScope",
     "CONF-020": "the first protocol version seen is reused for every later request",
+    "CONF-008": "unknown tools get a tool result with isError: true",
     "CONF-009": "ask_name sends an elicitation input request the client never declared",
     "CONF-010": "ask_name's input_required result has neither inputRequests nor requestState",
     "CONF-011": "weather returns structuredContent that does not match its outputSchema",
@@ -181,6 +182,9 @@ class Server:
                 sys.stderr.write("delete_everything was called\n")
                 sys.stderr.flush()
                 raise SystemExit(99)
+            if "CONF-008" in self.breaks:
+                text = f"Unknown tool: {name}"
+                return self._result({"content": [{"type": "text", "text": text}], "isError": True})
             raise Rpc(-32602, f"Unknown tool: {name}")
         raise Rpc(-32601, "Method not found", status=404)
 

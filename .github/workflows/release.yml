@@ -1,0 +1,87 @@
+name: Release
+
+# Push a tag like v0.1.0 to build, smoke-test on every OS, and publish a
+# GitHub release with the wheel and sdist attached. Publishing to PyPI is
+# deliberately not automated here.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Tag must match the package version
+        run: |
+          version=$(uv version --short)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match pyproject version $version" >&2
+            exit 1
+          fi
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Install the wheel (binary dependencies only) and run it
+        shell: bash
+        run: |
+          python -m venv .smoke
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            bin=.smoke/Scripts; py=.smoke/Scripts/python.exe
+          else
+            bin=.smoke/bin; py=.smoke/bin/python
+          fi
+          "$py" -m pip install --only-binary=:all: dist/*.whl
+          "$bin/mcpprobe" --version
+          "$bin/mcpprobe" checks list
+          # The reference server passes every check, so this must exit 0.
+          "$bin/mcpprobe" run --stdio "$py -u fixtures/servers/reference.py" --seed 1
+
+  release:
+    needs: smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Create GitHub release with notes from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" {on=1; next}
+            on && /^(## )?\[/ {exit}
+            on {print}
+          ' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "MCPProbe $GITHUB_REF_NAME" \
+            --notes-file notes.md

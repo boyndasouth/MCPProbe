@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from mcpprobe.engine.catalog import Severity
 from mcpprobe.engine.runner import Status
 from mcpprobe.protocol.era import Era
 
@@ -44,7 +45,10 @@ def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
         if item.status is Status.PASSED:
             continue
         style = _STYLE.get(item.status, "")
-        line = f"[{style}]{item.status.value:>8}[/] {item.case_id} ({item.severity.value})"
+        label = item.status.value
+        if item.status is Status.FAILED and item.severity is Severity.INFO:
+            style, label = "cyan", "note"  # advice: never fails a run
+        line = f"[{style}]{label:>8}[/] {item.case_id} ({item.severity.value})"
         if item.message:
             line += f": {item.message}"
         console.print(line, highlight=False)
@@ -56,9 +60,15 @@ def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
             )
     for reason, count in sorted(skipped.items()):
         console.print(f"[dim] skipped {count} case(s): {reason}[/]", highlight=False)
-    counts = ", ".join(
-        f"{result.count(status)} {status.value}" for status in Status if result.count(status)
+    notes = sum(
+        1 for r in result.results if r.status is Status.FAILED and r.severity is Severity.INFO
     )
+    tallies = {status: result.count(status) for status in Status}
+    tallies[Status.FAILED] -= notes
+    parts = [f"{count} {status.value}" for status, count in tallies.items() if count]
+    if notes:
+        parts.append(f"{notes} note(s)")
+    counts = ", ".join(parts)
     console.print(f"{len(result.results)} cases: {counts}", highlight=False)
     if result.restarts:
         console.print(f"server restarted {result.restarts} time(s)", highlight=False)

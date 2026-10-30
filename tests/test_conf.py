@@ -192,3 +192,53 @@ async def test_allow_destructive_does_call_them(tmp_path: Path) -> None:
     result = await runner.run(plan)
     assert result.restarts == 1
     assert result.results[0].status is Status.CRASHED
+
+
+SLOW_START = Path(__file__).parent / "support" / "slow_start.py"
+
+
+async def test_slow_starting_server_keeps_its_capabilities(tmp_path: Path) -> None:
+    # A cold `npx` can take seconds before the first answer; the first
+    # server/discover must still get the capabilities (regression).
+    spec = StdioServer((sys.executable, "-u", str(SLOW_START), "6"))
+    result = await run_checks(spec, Transport.STDIO, tmp_path)
+    assert result.facts is not None
+    assert result.facts.capabilities_known
+    assert "tools" in result.facts.capabilities
+    assert [r for r in result.results if r.status is not Status.PASSED] == []
+
+
+async def test_capabilities_recovered_when_first_discover_times_out(tmp_path: Path) -> None:
+    from mcpprobe.engine.connection import StdioConnection
+    from mcpprobe.protocol.era import detect_era
+
+    connection = StdioConnection(StdioServer((sys.executable, "-u", str(SLOW_START), "2")))
+    await connection.start()
+    try:
+        # First wait too short on purpose: the fallback must still find the capabilities.
+        facts = await detect_era(connection, timeout=10, startup_timeout=0.5)
+    finally:
+        await connection.close()
+    assert facts.era is Era.MODERN
+    assert facts.capabilities_known
+    assert "tools" in facts.capabilities
+
+
+async def test_unknown_capabilities_are_reported_honestly(tmp_path: Path) -> None:
+    from mcpprobe.engine.runner import CaseContext
+    from mcpprobe.engine.seed import rng
+    from mcpprobe.protocol.era import ServerFacts
+    from mcpprobe.suites.conf.checks import conf_011, conf_016
+
+    ctx = CaseContext(
+        connection=None,  # type: ignore[arg-type]  # never used: the checks skip first
+        seed=1,
+        case_id="x",
+        timeout=1,
+        rng=rng(1, "x"),
+        facts=ServerFacts(Era.MODERN),
+    )
+    for check in (conf_011, conf_016):
+        outcome = await check(ctx)
+        assert outcome.status is Status.SKIPPED
+        assert "did not return" in outcome.message

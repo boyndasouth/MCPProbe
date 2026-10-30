@@ -153,6 +153,7 @@ class Runner:
     cases_dir: Path
     case_timeout: float = 10.0
     liveness_timeout: float = 5.0
+    startup_timeout: float = 30.0
     keep_going: bool = False
     max_restarts: int = 20
     allow_destructive: bool = False
@@ -170,7 +171,7 @@ class Runner:
             raise ServerUnavailable(f"server did not start: {exc}") from exc
         return connection
 
-    async def alive(self, connection: Connection) -> bool:
+    async def alive(self, connection: Connection, timeout: float | None = None) -> bool:
         if not connection.running:
             return False
         self._liveness_counter += 1
@@ -181,7 +182,7 @@ class Runner:
         else:
             probe = {"jsonrpc": "2.0", "id": probe_id, "method": LIVENESS_METHOD}
         try:
-            reply = await connection.call(probe, self.liveness_timeout)
+            reply = await connection.call(probe, timeout or self.liveness_timeout)
         except TransportError:
             return False
         return reply.response is not None or reply.http_status is not None
@@ -192,7 +193,7 @@ class Runner:
         try:
             # Era first: on stdio, server/discover must be the first request, or a
             # dual-era server may lock into legacy semantics (stdio#backward-compatibility).
-            self._facts = await detect_era(connection, self.liveness_timeout)
+            self._facts = await detect_era(connection, self.liveness_timeout, self.startup_timeout)
             if not await self.alive(connection):
                 detail = ""
                 stderr = getattr(getattr(connection, "stdio", None), "stderr_tail", None)
@@ -255,7 +256,13 @@ class Runner:
         order = sorted(cases, key=lambda c: c.id)
         rng(self.seed, "order", suite.value).shuffle(order)
         results: list[CaseResult] = []
-        connection: Connection | None = await self._open()
+        fresh = await self._open()
+        connection: Connection | None = fresh
+        # A fresh process may still be starting (npx, uvx): wait for its first
+        # answer here, so the start-up delay is never charged to a case.
+        if not await self.alive(fresh, self.startup_timeout):
+            await fresh.close()
+            connection = None
         try:
             for case in order:
                 if connection is None:
@@ -309,7 +316,7 @@ class Runner:
             connection = await self._open()
         except ServerUnavailable:
             return None
-        if await self.alive(connection):
+        if await self.alive(connection, self.startup_timeout):
             return connection
         await connection.close()
         return None

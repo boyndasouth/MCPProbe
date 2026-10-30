@@ -45,6 +45,10 @@ class ServerFacts:
     """The DiscoverResult, when ``server/discover`` answered with one."""
 
     @property
+    def capabilities_known(self) -> bool:
+        return self.discover is not None
+
+    @property
     def capabilities(self) -> dict[str, Any]:
         caps = (self.discover or {}).get("capabilities")
         return caps if isinstance(caps, dict) else {}
@@ -62,23 +66,37 @@ def _modern_error(reply: Reply) -> bool:
     return reply.http_status == 404 and code == METHOD_NOT_FOUND
 
 
-async def detect_era(connection: Connection, timeout: float) -> ServerFacts:
+async def _discover(connection: Connection, request_id: str, timeout: float) -> Reply | None:
     try:
-        reply = await connection.call(request("server/discover", "mcpprobe-era-discover"), timeout)
+        return await connection.call(request("server/discover", request_id), timeout)
     except TransportError:
-        reply = None
-    if reply is not None:
-        result = reply.result
-        if isinstance(result, dict) and "supportedVersions" in result:
-            return ServerFacts(Era.MODERN, result)
-        if _modern_error(reply):
-            return ServerFacts(Era.MODERN)
+        return None
+
+
+def _discover_result(reply: Reply | None) -> dict[str, Any] | None:
+    result = None if reply is None else reply.result
+    return result if isinstance(result, dict) and "supportedVersions" in result else None
+
+
+async def detect_era(
+    connection: Connection, timeout: float, startup_timeout: float | None = None
+) -> ServerFacts:
+    """``startup_timeout`` bounds the first request, which includes server start-up
+    (a cold ``npx`` or ``uvx`` can take many seconds); later requests use ``timeout``."""
+    reply = await _discover(connection, "mcpprobe-era-discover", startup_timeout or timeout)
+    if (found := _discover_result(reply)) is not None:
+        return ServerFacts(Era.MODERN, found)
+    if reply is not None and _modern_error(reply):
+        return ServerFacts(Era.MODERN)
 
     try:
         reply = await connection.call(request("tools/list", "mcpprobe-era-tools"), timeout)
     except TransportError:
         return ServerFacts(Era.NOT_MODERN)
     result = reply.result
-    if (isinstance(result, dict) and "resultType" in result) or _modern_error(reply):
-        return ServerFacts(Era.MODERN)
-    return ServerFacts(Era.NOT_MODERN)
+    if not ((isinstance(result, dict) and "resultType" in result) or _modern_error(reply)):
+        return ServerFacts(Era.NOT_MODERN)
+    # Modern after all. If discover only missed its window, ask once more so
+    # the checks get the real capabilities instead of an empty set.
+    retry = await _discover(connection, "mcpprobe-era-discover-retry", timeout)
+    return ServerFacts(Era.MODERN, _discover_result(retry))

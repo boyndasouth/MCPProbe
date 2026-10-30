@@ -62,6 +62,15 @@ def _has_tools(ctx: CaseContext) -> bool:
     return "tools" in ctx.facts.capabilities
 
 
+def _no_tools(ctx: CaseContext) -> Outcome:
+    """Skip reason for tool checks; honest about *why* tools are unavailable."""
+    if not ctx.facts.capabilities_known:
+        return Outcome.skipped(
+            "server capabilities are unknown because server/discover did not return them"
+        )
+    return Outcome.skipped("server does not declare the tools capability")
+
+
 async def _cacheable_results(ctx: CaseContext) -> list[tuple[str, Reply]]:
     """Results of the cacheable operations this server supports."""
     replies = [("server/discover", await modern_call(ctx, "server/discover", "conf-discover"))]
@@ -279,7 +288,7 @@ async def conf_007(ctx: CaseContext) -> Outcome:
 
 async def conf_012(ctx: CaseContext) -> Outcome:
     if not _has_tools(ctx):
-        return Outcome.skipped("server does not declare the tools capability")
+        return _no_tools(ctx)
     orders: list[list[Any]] = []
     for attempt in range(3):
         reply = await modern_call(ctx, "tools/list", f"conf-012-{attempt}")
@@ -319,6 +328,8 @@ async def conf_015(ctx: CaseContext) -> Outcome:
 
 
 async def conf_016(ctx: CaseContext) -> Outcome:
+    if not ctx.facts.capabilities_known:
+        return Outcome.skipped("server/discover did not return capabilities")
     if "logging" in ctx.facts.capabilities:
         return Outcome.failed("declares the logging capability, deprecated in 2026-07-28")
     return Outcome.passed()
@@ -355,6 +366,32 @@ async def conf_018(ctx: CaseContext) -> Outcome:
     return Outcome.passed()
 
 
+# ------------------------------------------------------------------ CONF-008
+
+UNKNOWN_TOOL = "mcpprobe-no-such-tool"
+
+
+async def conf_008(ctx: CaseContext) -> Outcome:
+    """Calling a tool that does not exist is a protocol error, not a tool result."""
+    if not _has_tools(ctx):
+        return _no_tools(ctx)
+    inventory = await list_tools(ctx, allow_destructive=True)
+    names = {tool.name for tool in inventory.callable} | {name for name, _ in inventory.skipped}
+    name = UNKNOWN_TOOL
+    while name in names:  # never call a real tool by accident
+        name += "-x"
+    reply = await modern_call(ctx, "tools/call", "conf-008", {"name": name, "arguments": {}})
+    if reply.error is not None:
+        return Outcome.passed()
+    result = reply.result
+    if isinstance(result, dict) and result.get("isError") is True:
+        return Outcome.failed(
+            f"calling unknown tool {name!r} returned a tool result with isError: true; "
+            "the spec lists an unknown tool as a protocol error (JSON-RPC error)"
+        )
+    return Outcome.failed(f"calling unknown tool {name!r} returned {describe(reply.response)}")
+
+
 # ------------------------------------------------- CONF-009 / 010 / 011 (tools)
 
 ALLOWED_INPUT_METHODS = frozenset(INPUT_REQUEST_CAPABILITY)
@@ -373,7 +410,7 @@ def _skip_note(inventory: ToolInventory) -> str:
 async def conf_009(ctx: CaseContext) -> Outcome:
     """Call tools declaring no client capabilities; undeclared input requests are a violation."""
     if not _has_tools(ctx):
-        return Outcome.skipped("server does not declare the tools capability")
+        return _no_tools(ctx)
     inventory = await list_tools(ctx, ctx.allow_destructive)
     exercised = 0
     for tool in inventory.callable:
@@ -443,7 +480,7 @@ async def conf_010(ctx: CaseContext) -> Outcome:
                 "resources/read and tools/call may do"
             )
     if not _has_tools(ctx):
-        return Outcome.skipped("server does not declare the tools capability")
+        return _no_tools(ctx)
     inventory = await list_tools(ctx, ctx.allow_destructive)
     rounds = 0
     for tool in inventory.callable:
@@ -464,7 +501,7 @@ async def conf_010(ctx: CaseContext) -> Outcome:
 async def conf_011(ctx: CaseContext) -> Outcome:
     """structuredContent is present and valid wherever a tool declares outputSchema."""
     if not _has_tools(ctx):
-        return Outcome.skipped("server does not declare the tools capability")
+        return _no_tools(ctx)
     inventory = await list_tools(ctx, ctx.allow_destructive)
     checked = 0
     for tool in inventory.callable:
@@ -531,6 +568,7 @@ CASES: list[CaseSpec] = [
     ("CONF-017", "", conf_017, BOTH),
     ("CONF-018", "", conf_018, BOTH),
     ("CONF-020", "", conf_020, BOTH),
+    ("CONF-008", "", conf_008, BOTH),
     ("CONF-009", "", conf_009, BOTH),
     ("CONF-010", "", conf_010, BOTH),
     ("CONF-011", "", conf_011, BOTH),

@@ -194,7 +194,7 @@ async def test_restart_limit_skips_remaining(stdio_spec: StdioServer, tmp_path: 
 async def test_server_that_never_answers_is_unavailable(tmp_path: Path) -> None:
     silent = StdioServer((sys.executable, "-c", "import sys; sys.stdin.read()"))
     with pytest.raises(ServerUnavailable, match="did not answer"):
-        await _runner(silent, tmp_path, liveness_timeout=0.5).run([])
+        await _runner(silent, tmp_path, liveness_timeout=0.5, startup_timeout=0.5).run([])
 
 
 async def test_server_that_cannot_start_is_unavailable(tmp_path: Path) -> None:
