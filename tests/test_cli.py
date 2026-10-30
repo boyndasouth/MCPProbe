@@ -41,7 +41,7 @@ def test_run_against_stdio_server(tmp_path: Path, stdio_argv: list[str]) -> None
     )
     assert result.exit_code == ExitCode.PASSED, result.output
     assert "seed 42" in result.output
-    assert "no checks to" in " ".join(result.output.split())
+    assert "not modern-era" in " ".join(result.output.split())
 
 
 def test_run_unreachable_server_exits_2(tmp_path: Path) -> None:
@@ -51,7 +51,7 @@ def test_run_unreachable_server_exits_2(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "extra",
-    [["--report", "json"], ["-o", "probe.json"], ["--env", "A=b", "--http", "http://h"]],
+    [["--report", "sarif"], ["-o", "probe.json"], ["--env", "A=b", "--http", "http://h"]],
 )
 def test_run_unsupported_options_exit_3(extra: list[str]) -> None:
     args = ["run", *extra] if "--http" in extra else ["run", "--stdio", "x", *extra]
@@ -186,10 +186,14 @@ def test_record_empty_or_missing_script(tmp_path: Path) -> None:
         assert runner.invoke(app, args).exit_code == ExitCode.CONFIG_INVALID
 
 
-def test_checks_list_and_explain_on_empty_catalog() -> None:
+def test_checks_list_and_explain_real_catalog() -> None:
     listed = runner.invoke(app, ["checks", "list"])
     assert listed.exit_code == 0
-    assert runner.invoke(app, ["checks", "explain", "CONF-001"]).exit_code == 3
+    assert "CONF-001" in listed.output
+    explained = runner.invoke(app, ["checks", "explain", "CONF-006"])
+    assert explained.exit_code == 0
+    assert "streamable-http#server-validation" in "".join(explained.output.split())
+    assert runner.invoke(app, ["checks", "explain", "CONF-999"]).exit_code == 3
 
 
 def test_checks_list_and_explain_with_entries(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -242,3 +246,40 @@ def test_silent_server_is_flagged(tmp_path: Path, stdio_argv: list[str]) -> None
     replayed = runner.invoke(app, ["replay", str(recording), "--timeout", "0.5"])
     assert replayed.exit_code == ExitCode.FAILED
     assert "trivially" in replayed.output
+
+
+def test_run_json_report(tmp_path: Path) -> None:
+    import json
+    import sys
+
+    reference = Path(__file__).parents[1] / "fixtures" / "servers" / "reference.py"
+    command = f'"{sys.executable}" -u "{reference}" --break CONF-004'
+    report = tmp_path / "probe.json"
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--stdio",
+            command,
+            "--seed",
+            "1",
+            "--report",
+            "json",
+            "-o",
+            str(report),
+            "--cases-dir",
+            str(tmp_path / "cases"),
+        ],
+    )
+    assert result.exit_code == ExitCode.FAILED, result.output
+    data = json.loads(report.read_text(encoding="utf-8"))
+    assert data["format"] == "mcpprobe.report"
+    assert data["era"] == "modern"
+    failed = [r for r in data["results"] if r["status"] == "failed"]
+    assert [r["id"] for r in failed] == ["CONF-004"]
+    assert failed[0]["spec_ref"].startswith("https://modelcontextprotocol.io/")
+
+    to_stdout = runner.invoke(
+        app, ["run", "--stdio", command, "--report", "json", "--cases-dir", str(tmp_path / "c")]
+    )
+    assert json.loads(to_stdout.output)["exit_code"] == 1

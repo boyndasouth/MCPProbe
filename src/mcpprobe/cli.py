@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from mcpprobe import __version__
-from mcpprobe.engine.catalog import CatalogError, Check, Suite, load_catalog
+from mcpprobe.engine.catalog import CatalogError, Check, Suite, Transport, load_catalog
 from mcpprobe.exit_codes import ExitCode
 
 app = typer.Typer(
@@ -122,12 +122,14 @@ def run(
     env_vars = _parse_env(env)
     if baseline is not None and not baseline.is_file():
         raise _fail(f"baseline not found: {baseline}", ExitCode.CONFIG_INVALID)
-    if report is not ReportFormat.TERMINAL or output is not None or baseline is not None:
+    if report not in (ReportFormat.TERMINAL, ReportFormat.JSON) or baseline is not None:
         raise _fail(
-            "only the terminal report exists so far; JSON arrives in M1, "
-            "JUnit/SARIF/HTML and --baseline in M4",
+            "only terminal and JSON reports exist so far; "
+            "JUnit, SARIF, HTML and --baseline arrive in M4",
             ExitCode.CONFIG_INVALID,
         )
+    if output is not None and report is ReportFormat.TERMINAL:
+        raise _fail("-o needs a file format, e.g. --report json", ExitCode.CONFIG_INVALID)
     wanted = _parse_suites(suites)
     catalog = _load_catalog_or_exit()
 
@@ -149,13 +151,29 @@ def run(
         spec = HttpServer(http, tuple(headers))
 
     run_seed = new_seed() if seed is None else seed
-    plan = collect(wanted, catalog, SuiteOptions(allow_destructive=allow_destructive))
+    transport = Transport.STDIO if stdio is not None else Transport.HTTP
+    plan = collect(
+        wanted,
+        catalog,
+        SuiteOptions(allow_destructive=allow_destructive, transport=transport),
+    )
     runner = Runner(spec, run_seed, cases_dir, case_timeout=timeout, keep_going=keep_going)
     try:
         result = asyncio.run(runner.run(plan))
     except ServerUnavailable as exc:
         raise _fail(str(exc), ExitCode.PROBE_ERROR) from exc
-    render(result, out, cases_dir=cases_dir)
+    if report is ReportFormat.JSON:
+        from mcpprobe.report.json_report import dumps
+
+        text = dumps(result, spec)
+        if output is None:
+            typer.echo(text, nl=False)
+        else:
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(text, encoding="utf-8")
+            render(result, err, cases_dir=cases_dir)
+    else:
+        render(result, out, cases_dir=cases_dir)
     raise typer.Exit(int(result.exit_code))
 
 

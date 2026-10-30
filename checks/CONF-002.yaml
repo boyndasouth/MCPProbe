@@ -1,0 +1,10 @@
+id: CONF-002
+title: Requests missing required _meta fields are rejected with -32602
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta
+description: Sends server/discover once without io.modelcontextprotocol/protocolVersion (stdio
+  only) and once without io.modelcontextprotocol/clientCapabilities. A request missing a required
+  field is malformed and MUST be rejected with -32602 Invalid params; on HTTP with status
+  400. Over HTTP the missing-version case is skipped, because the body then also disagrees
+  with the required MCP-Protocol-Version header, for which -32020 is equally required.

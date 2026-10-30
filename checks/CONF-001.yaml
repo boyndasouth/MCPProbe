@@ -1,0 +1,8 @@
+id: CONF-001
+title: server/discover exists and lists supported versions and capabilities
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation
+description: Sends server/discover with valid request metadata. Servers MUST implement it;
+  the result must carry supportedVersions (a non-empty list of strings) and a capabilities
+  object. Server identity is a SHOULD and is checked separately by CONF-017.

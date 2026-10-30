@@ -1,0 +1,8 @@
+id: CONF-016
+title: Deprecated logging capability is declared
+severity: warn
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/deprecated#deprecated
+description: Reads the capabilities from server/discover. Logging is deprecated as of 2026-07-28
+  (SEP-2577) and new implementations SHOULD NOT adopt it. Roots and sampling are also deprecated;
+  they are client features and are checked when the MRTR checks land.

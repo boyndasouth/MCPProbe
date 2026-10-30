@@ -1,0 +1,11 @@
+id: CONF-003
+title: Unsupported protocol version returns -32022 with data.supported
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation
+description: Sends an ordinary request (tools/list, prompts/list or resources/list, whichever
+  the server declares; server/discover if none) declaring protocol version 1900-01-01. The
+  server MUST answer with UnsupportedProtocolVersionError (-32022) whose data lists the supported
+  versions and echoes the requested one; on HTTP with status 400. Earlier cases may have sent
+  valid requests on the same connection; a server that keeps version state between requests
+  is also caught, more directly, by CONF-020.

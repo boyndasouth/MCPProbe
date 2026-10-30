@@ -1,0 +1,9 @@
+id: CONF-005
+title: 'Request ids: null is rejected and responses echo the id exactly'
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#requests
+description: Sends a request with id null, which MUST NOT be accepted (an error or no answer
+  both pass; a result fails). Then sends a string id with non-ASCII characters and a large
+  integer id; responses MUST carry the same id, with the same JSON type. Uses modern requests,
+  so it runs on modern servers only until legacy checks land in M2.

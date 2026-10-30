@@ -21,9 +21,11 @@ description: >
    write a check from memory of the protocol; `spec_ref` must link the exact
    section and anchor, and there must be a MUST or SHOULD behind it.
 2. Add the YAML file here.
-3. Add a failing and a passing fixture server under
-   `fixtures/servers/<CHECK-ID>/`.
-4. Add a test that runs the check against both fixtures.
+3. Add the violation to `BREAKS` in `fixtures/servers/reference.py` (the
+   failing fixture is `reference.py --break <ID>`, the passing one is plain
+   `reference.py`).
+4. Register the case in `src/mcpprobe/suites/conf/checks.py`; `tests/test_conf.py`
+   runs it against both fixtures.
 
 If the spec text is ambiguous, ship the check as `warn` and say so in the
 description.

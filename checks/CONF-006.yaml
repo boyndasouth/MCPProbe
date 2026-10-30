@@ -1,0 +1,10 @@
+id: CONF-006
+title: HTTP headers that disagree with the body are rejected with -32020
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#server-validation
+transports:
+- http
+description: 'Sends server/discover three times: with an Mcp-Method header naming another
+  method, with an MCP-Protocol-Version header that differs from the body, and without Mcp-Method.
+  Each MUST be rejected with HTTP 400 and HeaderMismatch (-32020).'

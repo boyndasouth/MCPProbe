@@ -34,6 +34,9 @@ uv run pytest
 
 1. Read the current spec section on modelcontextprotocol.io.
 2. Add `checks/<ID>.yaml`.
-3. Add `fixtures/servers/<ID>/bad.py` and `good.py`.
-4. Add a test that the check fails `bad.py` and passes `good.py`.
+3. Add the violation to `BREAKS` in `fixtures/servers/reference.py`, so
+   `--break <ID>` makes the reference server fail the check.
+4. Register the case in `src/mcpprobe/suites/conf/checks.py`.
+   `tests/test_conf.py` then runs it against the passing and failing fixture
+   on every transport it applies to.
 5. Add a line to `CHANGELOG.md`.

@@ -1,10 +1,23 @@
 # Fixture servers
 
-Each check ships with two tiny servers in `fixtures/servers/<CHECK-ID>/`:
+`reference.py` is a small MCP server written against the raw wire protocol
+(standard library only), so it can break the protocol on purpose.
 
-- `bad.py` violates the check and must make it fail
-- `good.py` satisfies it and must make it pass
+- Run with no flags, it passes every implemented check: the **passing**
+  fixture.
+- `--break <CHECK-ID>` makes it violate exactly that check: the **failing**
+  fixture.
 
-CI runs every check against both. Reference servers that pass the whole suite
-live in `fixtures/servers/reference/`. Fixtures are written against the raw
-wire protocol, not an MCP SDK, so they can break the protocol on purpose.
+```bash
+python fixtures/servers/reference.py                    # stdio, conformant
+python fixtures/servers/reference.py --break CONF-004   # results lack resultType
+python fixtures/servers/reference.py --http 0           # HTTP, prints its URL on stderr
+```
+
+`tests/test_conf.py` runs every check against both, on each transport the
+check applies to. Adding a check means adding its violation to `BREAKS` in
+`reference.py`; the test fails until you do.
+
+One parameterised server instead of a `good.py`/`bad.py` pair per check keeps
+each failing fixture to the few lines that differ, and guarantees the good and
+bad servers are otherwise identical.

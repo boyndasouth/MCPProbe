@@ -23,5 +23,12 @@ All notable changes to this project are documented here. The format follows
   a `tools/list` liveness probe between cases, crash attribution with server
   restart, and every non-passing case saved for `mcpprobe replay`.
 - `mcpprobe run` executes the runner and prints a terminal summary.
+- First conformance checks for 2026-07-28: CONF-001 to 007, 012, 015 to 018
+  and 020, each tested against a passing and a failing fixture.
+- Reference fixture server (`fixtures/servers/reference.py`, stdio and HTTP)
+  with `--break <ID>` to violate one check at a time.
+- Era probe: `server/discover` is sent first, and modern checks are skipped
+  on servers that do not speak 2026-07-28.
+- JSON report (`--report json`), deterministic for a given seed.
 - Request metadata header helper for 2026-07-28 (`Mcp-Method`, `Mcp-Name`,
   Base64 sentinel encoding).

@@ -3,10 +3,10 @@
 Tells an MCP server author, in one run, whether their server is spec-compliant,
 robust to bad input, and usable by a real model.
 
-> **Status: pre-alpha (milestone M0 complete on Linux and macOS).** The wire
-> client, recorder, replay and runner work. No checks exist yet (they arrive
-> in M1), so `mcpprobe run` currently only confirms the server starts and
-> answers.
+> **Status: pre-alpha (milestone M1 in progress).** 13 conformance checks for
+> the 2026-07-28 revision run today, with terminal and JSON reports. Legacy
+> and dual-era checks arrive in M2; servers that don't speak 2026-07-28 get
+> their modern checks skipped, never failed.
 
 Targets the stateless **2026-07-28** revision plus the legacy
 `initialize`-era revisions (2025-11-25, 2025-06-18), and detects dual-era

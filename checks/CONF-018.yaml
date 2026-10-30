@@ -1,0 +1,8 @@
+id: CONF-018
+title: Cacheable results carry ttlMs and cacheScope
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching#cacheable-results
+description: 'Calls server/discover and, if tools are declared, tools/list. Servers MUST include
+  caching hints on complete results of these operations: ttlMs as an integer >= 0 and cacheScope
+  as public or private.'

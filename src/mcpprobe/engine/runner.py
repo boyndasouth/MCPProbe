@@ -7,12 +7,17 @@ Lifecycle, per the spec's Architecture section:
 - **Order.** Cases run in an order shuffled by the run seed, which surfaces
   hidden order dependencies; results are reported sorted by case id, so the
   report does not depend on that order.
-- **Liveness.** After every case the runner sends a cheap ``tools/list``.
-  Any JSON-RPC reply, even an error, means alive. No reply, a dead process
+- **Liveness.** After every case the runner sends a cheap ``tools/list``,
+  carrying modern ``_meta`` when the server is modern so that a dual-era
+  server is never nudged into its legacy mode. Any JSON-RPC reply, even an
+  error, means alive. No reply, a dead process
   or a dropped connection marks the case that just ran as the crash cause;
   a stdio server is then restarted and the suite continues.
 - **Repro.** Every case that does not pass is saved as a recording of the
   connection so far, which ``mcpprobe replay`` re-runs byte for byte.
+- **Era.** The preflight decides whether the server is modern-era once per
+  run, sending ``server/discover`` before anything else as the stdio binding
+  requires; checks for an era the server does not speak are skipped.
 
 Conformance errors stop later suites unless ``keep_going`` is set.
 """
@@ -20,16 +25,18 @@ Conformance errors stop later suites unless ``keep_going`` is set.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from mcpprobe.engine.catalog import Era as CheckEra
 from mcpprobe.engine.catalog import Severity, Suite
 from mcpprobe.engine.connection import Connection, ServerSpec, connect, recording_of
 from mcpprobe.engine.seed import rng
 from mcpprobe.exit_codes import ExitCode
+from mcpprobe.protocol.era import Era, ServerFacts, detect_era
+from mcpprobe.protocol.modern import request as modern_request
 from mcpprobe.transport.errors import TransportClosed, TransportError, TransportTimeout
 
 if TYPE_CHECKING:
@@ -74,6 +81,7 @@ class CaseContext:
     case_id: str
     timeout: float
     rng: random.Random = field(repr=False)
+    facts: ServerFacts = field(default_factory=lambda: ServerFacts(Era.MODERN))
 
 
 @dataclass(frozen=True)
@@ -84,6 +92,8 @@ class Case:
     severity: Severity
     run: Callable[[CaseContext], Awaitable[Outcome]]
     title: str = ""
+    era: CheckEra = CheckEra.BOTH
+    spec_ref: str = ""
 
 
 @dataclass(frozen=True)
@@ -95,6 +105,7 @@ class CaseResult:
     message: str = ""
     repro: str | None = None
     """File name of the saved recording, relative to the cases directory."""
+    spec_ref: str = ""
 
     @property
     def is_finding(self) -> bool:
@@ -110,6 +121,7 @@ class RunResult:
     results: list[CaseResult] = field(default_factory=list)
     restarts: int = 0
     stopped_early: bool = False
+    facts: ServerFacts | None = None
 
     @property
     def exit_code(self) -> ExitCode:
@@ -142,6 +154,7 @@ class Runner:
     max_restarts: int = 20
     connect: Callable[[ServerSpec], Connection] = field(default=connect)
     _liveness_counter: int = field(default=0, init=False)
+    _facts: ServerFacts = field(default_factory=lambda: ServerFacts(Era.MODERN), init=False)
 
     # ------------------------------------------------------------- lifecycle
 
@@ -157,21 +170,25 @@ class Runner:
         if not connection.running:
             return False
         self._liveness_counter += 1
-        probe = {
-            "jsonrpc": "2.0",
-            "id": f"mcpprobe-liveness-{self._liveness_counter}",
-            "method": LIVENESS_METHOD,
-        }
+        probe_id = f"mcpprobe-liveness-{self._liveness_counter}"
+        probe: dict[str, Any]
+        if self._facts.era is Era.MODERN:
+            probe = modern_request(LIVENESS_METHOD, probe_id)
+        else:
+            probe = {"jsonrpc": "2.0", "id": probe_id, "method": LIVENESS_METHOD}
         try:
             reply = await connection.call(probe, self.liveness_timeout)
         except TransportError:
             return False
         return reply.response is not None or reply.http_status is not None
 
-    async def preflight(self) -> None:
-        """Start the server once and make sure it answers before running anything."""
+    async def preflight(self) -> ServerFacts:
+        """Start the server, make sure it answers, and learn its era."""
         connection = await self._open()
         try:
+            # Era first: on stdio, server/discover must be the first request, or a
+            # dual-era server may lock into legacy semantics (stdio#backward-compatibility).
+            self._facts = await detect_era(connection, self.liveness_timeout)
             if not await self.alive(connection):
                 detail = ""
                 stderr = getattr(getattr(connection, "stdio", None), "stderr_tail", None)
@@ -181,6 +198,7 @@ class Runner:
                     f"server did not answer a {LIVENESS_METHOD} probe within "
                     f"{self.liveness_timeout:g}s{detail}"
                 )
+            return self._facts
         finally:
             await connection.close()
 
@@ -188,23 +206,44 @@ class Runner:
 
     async def run(self, plan: Sequence[tuple[Suite, Sequence[Case]]]) -> RunResult:
         result = RunResult(seed=self.seed)
-        await self.preflight()
+        self._facts = await self.preflight()
+        result.facts = self._facts
         for suite, cases in plan:
-            if not cases:
+            runnable: list[Case] = []
+            for case in cases:
+                reason = self._skip_reason(case)
+                if reason is None and result.stopped_early:
+                    reason = "conformance failed"
+                if reason is None:
+                    runnable.append(case)
+                else:
+                    result.results.append(
+                        CaseResult(
+                            case.id,
+                            case.suite,
+                            case.severity,
+                            Status.SKIPPED,
+                            reason,
+                            spec_ref=case.spec_ref,
+                        )
+                    )
+            if not runnable:
                 continue
-            if result.stopped_early:
-                result.results.extend(
-                    CaseResult(c.id, c.suite, c.severity, Status.SKIPPED, "conformance failed")
-                    for c in cases
-                )
-                continue
-            result.results.extend(await self._run_suite(suite, cases, result))
+            result.results.extend(await self._run_suite(suite, runnable, result))
             if suite is Suite.CONF and not self.keep_going:
                 result.stopped_early = any(
                     r.suite is Suite.CONF and r.is_finding for r in result.results
                 )
         result.results.sort(key=lambda r: r.case_id)
         return result
+
+    def _skip_reason(self, case: Case) -> str | None:
+        modern = self._facts.era is Era.MODERN
+        if case.era is CheckEra.MODERN and not modern:
+            return "server is not modern-era (2026-07-28); legacy checks arrive in M2"
+        if case.era in (CheckEra.LEGACY, CheckEra.DUAL):
+            return "legacy and dual-era checks arrive in M2"
+        return None
 
     async def _run_suite(
         self, suite: Suite, cases: Sequence[Case], run: RunResult
@@ -218,7 +257,12 @@ class Runner:
                 if connection is None:
                     results.append(
                         CaseResult(
-                            case.id, case.suite, case.severity, Status.SKIPPED, "server is down"
+                            case.id,
+                            case.suite,
+                            case.severity,
+                            Status.SKIPPED,
+                            "server is down",
+                            spec_ref=case.spec_ref,
                         )
                     )
                     continue
@@ -238,7 +282,13 @@ class Runner:
                     repro = self._save(case, connection)
                 results.append(
                     CaseResult(
-                        case.id, case.suite, case.severity, outcome.status, outcome.message, repro
+                        case.id,
+                        case.suite,
+                        case.severity,
+                        outcome.status,
+                        outcome.message,
+                        repro,
+                        case.spec_ref,
                     )
                 )
         finally:
@@ -267,6 +317,7 @@ class Runner:
             case_id=case.id,
             timeout=self.case_timeout,
             rng=rng(self.seed, "case", case.id),
+            facts=self._facts,
         )
         try:
             async with asyncio.timeout(self.case_timeout):
@@ -279,9 +330,9 @@ class Runner:
             return Outcome(Status.ERROR, f"{type(exc).__name__}: {exc}")
 
     def _save(self, case: Case, connection: Connection) -> str:
+        # Named by case id alone so the report stays byte-identical across runs.
         text = recording_of(connection).dumps()
-        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:4]
-        name = f"{_safe_name(case.id)}-{digest}.json"
+        name = f"{_safe_name(case.id)}.json"
         self.cases_dir.mkdir(parents=True, exist_ok=True)
         (self.cases_dir / name).write_text(text, encoding="utf-8")
         return name

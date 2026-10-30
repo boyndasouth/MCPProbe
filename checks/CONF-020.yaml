@@ -1,0 +1,9 @@
+id: CONF-020
+title: Protocol version is read from each request, not remembered
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#statelessness
+description: Sends a valid 2026-07-28 request, then the same request declaring version 1900-01-01
+  on the same connection. Servers MUST NOT rely on prior requests over the same connection
+  to establish context such as the protocol version, so the second request MUST still get
+  UnsupportedProtocolVersionError (-32022).

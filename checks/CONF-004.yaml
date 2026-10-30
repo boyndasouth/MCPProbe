@@ -1,0 +1,8 @@
+id: CONF-004
+title: Every result carries resultType
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#result-responses
+description: Calls server/discover and, if tools are declared, tools/list. Every result MUST
+  include a resultType string; values outside the core set (complete, input_required) are
+  allowed only when the server advertises extensions.

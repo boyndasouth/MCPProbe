@@ -1,0 +1,7 @@
+id: CONF-012
+title: tools/list returns tools in a deterministic order
+severity: warn
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#capabilities
+description: Calls tools/list three times and compares the order of tool names. Servers SHOULD
+  return tools in the same order while the set is unchanged. Only the first page is compared.

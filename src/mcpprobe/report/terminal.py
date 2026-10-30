@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from mcpprobe.engine.runner import Status
+from mcpprobe.protocol.era import Era
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,13 +25,22 @@ _STYLE = {
 
 def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
     console.print(f"seed {result.seed}", highlight=False)
+    if result.facts is not None and result.facts.era is not Era.MODERN:
+        console.print(
+            "The server does not speak the 2026-07-28 revision, so modern checks are "
+            "skipped. Legacy-era checks arrive in milestone M2."
+        )
     if not result.results:
         console.print(
             "The server started and answered the liveness probe, but there are no "
             "checks to run yet: conformance checks arrive in milestone M1."
         )
         return
+    skipped: dict[str, int] = {}
     for item in result.results:
+        if item.status is Status.SKIPPED:
+            skipped[item.message] = skipped.get(item.message, 0) + 1
+            continue
         if item.status is Status.PASSED:
             continue
         style = _STYLE.get(item.status, "")
@@ -44,6 +54,8 @@ def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
                 markup=False,
                 highlight=False,
             )
+    for reason, count in sorted(skipped.items()):
+        console.print(f"[dim] skipped {count} case(s): {reason}[/]", highlight=False)
     counts = ", ".join(
         f"{result.count(status)} {status.value}" for status in Status if result.count(status)
     )
