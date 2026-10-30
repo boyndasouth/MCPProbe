@@ -34,9 +34,28 @@ def test_invalid_invocations_exit_3(args: list[str]) -> None:
     assert runner.invoke(app, args).exit_code == ExitCode.CONFIG_INVALID
 
 
-def test_run_reports_probe_error_until_runner_exists() -> None:
-    result = runner.invoke(app, ["run", "--stdio", "python -m server", "--seed", "42"])
+def test_run_against_stdio_server(tmp_path: Path, stdio_argv: list[str]) -> None:
+    command = " ".join(f'"{part}"' for part in stdio_argv)
+    result = runner.invoke(
+        app, ["run", "--stdio", command, "--seed", "42", "--cases-dir", str(tmp_path)]
+    )
+    assert result.exit_code == ExitCode.PASSED, result.output
+    assert "seed 42" in result.output
+    assert "no checks to" in " ".join(result.output.split())
+
+
+def test_run_unreachable_server_exits_2(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["run", "--http", "http://127.0.0.1:9/mcp", "--timeout", "1"])
     assert result.exit_code == ExitCode.PROBE_ERROR
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [["--report", "json"], ["-o", "probe.json"], ["--env", "A=b", "--http", "http://h"]],
+)
+def test_run_unsupported_options_exit_3(extra: list[str]) -> None:
+    args = ["run", *extra] if "--http" in extra else ["run", "--stdio", "x", *extra]
+    assert runner.invoke(app, args).exit_code == ExitCode.CONFIG_INVALID
 
 
 def test_replay_rejects_invalid_recording(tmp_path: Path) -> None:

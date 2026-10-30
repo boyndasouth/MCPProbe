@@ -3,10 +3,10 @@
 Tells an MCP server author, in one run, whether their server is spec-compliant,
 robust to bad input, and usable by a real model.
 
-> **Status: pre-alpha (milestone M0).** The wire client (stdio, Streamable
-> HTTP, SSE), byte recorder and replay work. Suites and the runner are not
-> built yet, so `mcpprobe run` exits with code 2. Use `record` and `replay`
-> to exercise real servers today.
+> **Status: pre-alpha (milestone M0 complete on Linux and macOS).** The wire
+> client, recorder, replay and runner work. No checks exist yet (they arrive
+> in M1), so `mcpprobe run` currently only confirms the server starts and
+> answers.
 
 Targets the stateless **2026-07-28** revision plus the legacy
 `initialize`-era revisions (2025-11-25, 2025-06-18), and detects dual-era

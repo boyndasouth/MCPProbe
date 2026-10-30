@@ -19,5 +19,9 @@ All notable changes to this project are documented here. The format follows
 - Incremental SSE parser following the WHATWG event-stream rules.
 - Versioned recording format with secret masking.
 - `mcpprobe record` (developer tool) and a working `mcpprobe replay`.
+- Runner: seeded case order, per-suite fresh connection, per-case timeouts,
+  a `tools/list` liveness probe between cases, crash attribution with server
+  restart, and every non-passing case saved for `mcpprobe replay`.
+- `mcpprobe run` executes the runner and prints a terminal summary.
 - Request metadata header helper for 2026-07-28 (`Mcp-Method`, `Mcp-Name`,
   Base64 sentinel encoding).

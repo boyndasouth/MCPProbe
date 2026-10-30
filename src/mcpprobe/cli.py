@@ -103,22 +103,60 @@ def run(
     baseline: Annotated[
         Path | None, typer.Option(help="Previous JSON report; fail only on new findings.")
     ] = None,
+    env: Annotated[
+        list[str] | None, typer.Option(help="Env var for a stdio server, KEY=VALUE. Masked.")
+    ] = None,
+    timeout: Annotated[float, typer.Option(min=0.1, help="Seconds allowed per case.")] = 10.0,
+    cases_dir: Annotated[
+        Path, typer.Option(help="Where failing cases are saved for replay.")
+    ] = Path(".mcpprobe/cases"),
 ) -> None:
     """Probe a server and report findings."""
     if (stdio is None) == (http is None):
         raise _fail("pass exactly one of --stdio or --http", ExitCode.CONFIG_INVALID)
     if header and http is None:
         raise _fail("--header only applies to --http servers", ExitCode.CONFIG_INVALID)
-    for item in header or []:
-        if ":" not in item:
-            raise _fail(f"--header {item!r} must look like 'Name: value'", ExitCode.CONFIG_INVALID)
+    if env and stdio is None:
+        raise _fail("--env only applies to --stdio servers", ExitCode.CONFIG_INVALID)
+    headers = _parse_headers(header)
+    env_vars = _parse_env(env)
     if baseline is not None and not baseline.is_file():
         raise _fail(f"baseline not found: {baseline}", ExitCode.CONFIG_INVALID)
-    _parse_suites(suites)
-    _load_catalog_or_exit()
+    if report is not ReportFormat.TERMINAL or output is not None or baseline is not None:
+        raise _fail(
+            "only the terminal report exists so far; JSON arrives in M1, "
+            "JUnit/SARIF/HTML and --baseline in M4",
+            ExitCode.CONFIG_INVALID,
+        )
+    wanted = _parse_suites(suites)
+    catalog = _load_catalog_or_exit()
 
-    # M0 wires this to the runner once the wire client and recorder land.
-    raise _fail("the runner is not implemented yet (milestone M0)", ExitCode.PROBE_ERROR)
+    from mcpprobe.engine.connection import HttpServer, ServerSpec, StdioServer
+    from mcpprobe.engine.runner import Runner, ServerUnavailable
+    from mcpprobe.engine.seed import new_seed
+    from mcpprobe.report.terminal import render
+    from mcpprobe.suites import SuiteOptions, collect
+    from mcpprobe.transport.process import split_command
+
+    spec: ServerSpec
+    if stdio is not None:
+        argv = split_command(stdio)
+        if not argv:
+            raise _fail("--stdio command is empty", ExitCode.CONFIG_INVALID)
+        spec = StdioServer(tuple(argv), env_vars)
+    else:
+        assert http is not None
+        spec = HttpServer(http, tuple(headers))
+
+    run_seed = new_seed() if seed is None else seed
+    plan = collect(wanted, catalog, SuiteOptions(allow_destructive=allow_destructive))
+    runner = Runner(spec, run_seed, cases_dir, case_timeout=timeout, keep_going=keep_going)
+    try:
+        result = asyncio.run(runner.run(plan))
+    except ServerUnavailable as exc:
+        raise _fail(str(exc), ExitCode.PROBE_ERROR) from exc
+    render(result, out, cases_dir=cases_dir)
+    raise typer.Exit(int(result.exit_code))
 
 
 def _parse_headers(items: list[str] | None) -> list[tuple[str, str]]:
