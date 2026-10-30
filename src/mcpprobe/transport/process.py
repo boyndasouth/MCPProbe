@@ -70,5 +70,5 @@ def terminate_tree(process: asyncio.subprocess.Process, *, force: bool) -> None:
         )
         return
     sig = signal.SIGKILL if force else signal.SIGTERM
-    with contextlib.suppress(ProcessLookupError):  # raced with exit
+    with contextlib.suppress(ProcessLookupError, PermissionError):  # raced with exit
         os.killpg(process.pid, sig)
