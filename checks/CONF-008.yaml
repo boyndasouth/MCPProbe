@@ -1,10 +1,12 @@
 id: CONF-008
 title: Unknown tools get a JSON-RPC error, not a tool result
 severity: info
-era: modern
+era: both
 spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling
 description: 'Calls a tool name that is not in tools/list (checked first, so no real tool
   is ever called). The spec''s error-handling section lists an unknown tool as a protocol
   error, returned as a standard JSON-RPC error, as opposed to tool execution errors reported
   with isError: true. The section has no MUST or SHOULD, so this is info and never fails a
-  run. Any JSON-RPC error code passes; the spec''s example uses -32602.'
+  run. Any JSON-RPC error code passes; the spec''s example uses -32602. The 2025-11-25 tools
+  page lists unknown tools as a protocol error too. On servers that speak both eras it runs
+  twice: once with modern requests, and once inside a legacy initialize session as <ID>@legacy.'

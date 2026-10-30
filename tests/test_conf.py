@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from mcpprobe.engine.catalog import Era as CatalogEra
 from mcpprobe.engine.catalog import Suite, Transport, load_catalog
 from mcpprobe.engine.connection import HttpServer, StdioServer
 from mcpprobe.engine.runner import Runner, Status
@@ -46,8 +47,8 @@ reference = _load_reference()
 
 
 class HttpFixture:
-    def __init__(self, breaks: set[str]) -> None:
-        self.httpd = reference.make_http_server(reference.Server(breaks))
+    def __init__(self, breaks: set[str], era: str = "modern") -> None:
+        self.httpd = reference.make_http_server(reference.Server(breaks, era))
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}/mcp"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
@@ -56,9 +57,9 @@ class HttpFixture:
         self.httpd.server_close()
 
 
-def stdio_spec(breaks: tuple[str, ...] = ()) -> StdioServer:
+def stdio_spec(breaks: tuple[str, ...] = (), era: str = "modern") -> StdioServer:
     flags = [arg for check in breaks for arg in ("--break", check)]
-    return StdioServer((sys.executable, "-u", str(REFERENCE), *flags))
+    return StdioServer((sys.executable, "-u", str(REFERENCE), "--era", era, *flags))
 
 
 async def run_checks(
@@ -76,8 +77,8 @@ async def run_checks(
 def http_fixture() -> Iterator[Any]:
     fixtures: list[HttpFixture] = []
 
-    def start(breaks: set[str] | None = None) -> HttpFixture:
-        fixture = HttpFixture(breaks or set())
+    def start(breaks: set[str] | None = None, era: str = "modern") -> HttpFixture:
+        fixture = HttpFixture(breaks or set(), era)
         fixtures.append(fixture)
         return fixture
 
@@ -86,9 +87,27 @@ def http_fixture() -> Iterator[Any]:
         fixture.close()
 
 
-def _applicable() -> list[tuple[str, Transport]]:
-    pairs = {(check_id, t) for check_id, _, _, transports in CASES for t in transports}
-    return sorted(pairs)
+def _fixture_eras(check: CatalogEra) -> tuple[str, ...]:
+    """Which reference-server eras exercise a check of this era."""
+    return {
+        CatalogEra.MODERN: ("modern",),
+        CatalogEra.LEGACY: ("legacy",),
+        CatalogEra.BOTH: ("modern", "legacy"),
+        CatalogEra.DUAL: ("dual",),
+    }[check]
+
+
+# CONF-014 compares server/discover with initialize, so it needs a dual-era server.
+ERA_OVERRIDES = {"CONF-014": ("dual",)}
+
+
+def _applicable() -> list[tuple[str, Transport, str]]:
+    catalog = {check.id: check for check in load_catalog()}
+    triples = set()
+    for check_id, _, _, transports in CASES:
+        eras = ERA_OVERRIDES.get(check_id) or _fixture_eras(catalog[check_id].era)
+        triples |= {(check_id, t, era) for t in transports for era in eras}
+    return sorted(triples)
 
 
 def test_every_implemented_check_has_a_catalog_entry_and_a_break() -> None:
@@ -98,17 +117,19 @@ def test_every_implemented_check_has_a_catalog_entry_and_a_break() -> None:
         assert check_id in reference.BREAKS, f"{check_id} has no failing fixture"
 
 
-@pytest.mark.parametrize(("check_id", "transport"), _applicable())
+@pytest.mark.parametrize(("check_id", "transport", "era"), _applicable())
 async def test_check_passes_good_and_fails_bad_fixture(
-    check_id: str, transport: Transport, tmp_path: Path, http_fixture: Any
+    check_id: str, transport: Transport, era: str, tmp_path: Path, http_fixture: Any
 ) -> None:
     def spec(breaks: tuple[str, ...]) -> ServerSpec:
         if transport is Transport.STDIO:
-            return stdio_spec(breaks)
-        return HttpServer(http_fixture(set(breaks)).url)
+            return stdio_spec(breaks, era)
+        return HttpServer(http_fixture(set(breaks), era).url)
 
     good = await run_checks(spec(()), transport, tmp_path / "good", only=check_id)
     assert good.results, "no cases ran"
+    if era == "legacy" and check_id not in ("CONF-013", "CONF-021", "CONF-022"):
+        assert all(r.case_id.endswith("@legacy") for r in good.results), good.results
     assert all(r.status is Status.PASSED for r in good.results), good.results
 
     bad = await run_checks(spec((check_id,)), transport, tmp_path / "bad", only=check_id)
@@ -117,18 +138,27 @@ async def test_check_passes_good_and_fails_bad_fixture(
     assert all(s in (Status.PASSED, Status.FAILED) for s in statuses.values()), statuses
 
 
+@pytest.mark.parametrize("era", ["modern", "legacy", "dual"])
 @pytest.mark.parametrize("transport", [Transport.STDIO, Transport.HTTP])
 async def test_reference_server_passes_whole_suite(
-    transport: Transport, tmp_path: Path, http_fixture: Any
+    transport: Transport, era: str, tmp_path: Path, http_fixture: Any
 ) -> None:
     spec: ServerSpec = (
-        stdio_spec() if transport is Transport.STDIO else HttpServer(http_fixture().url)
+        stdio_spec(era=era)
+        if transport is Transport.STDIO
+        else HttpServer(http_fixture(era=era).url)
     )
     result = await run_checks(spec, transport, tmp_path)
     assert result.facts is not None
-    assert result.facts.era is Era.MODERN
-    assert [r for r in result.results if r.status is not Status.PASSED] == []
+    assert result.facts.era is Era(era)
+    ran = [r for r in result.results if r.status is not Status.SKIPPED]
+    assert ran
+    assert [r for r in ran if r.status is not Status.PASSED] == []
     assert result.exit_code is ExitCode.PASSED
+    if era == "dual":
+        ids = {r.case_id for r in ran}
+        assert "CONF-005/echo" in ids
+        assert "CONF-005/echo@legacy" in ids
 
 
 async def test_json_report_is_byte_identical(tmp_path: Path) -> None:
@@ -151,10 +181,10 @@ async def test_saved_case_replays(tmp_path: Path) -> None:
     assert replayed.matched, replayed.differences
 
 
-async def test_non_modern_server_skips_modern_checks(tmp_path: Path, stdio_argv: list[str]) -> None:
+async def test_unknown_era_server_skips_everything(tmp_path: Path, stdio_argv: list[str]) -> None:
     result = await run_checks(StdioServer(tuple(stdio_argv)), Transport.STDIO, tmp_path)
     assert result.facts is not None
-    assert result.facts.era is Era.NOT_MODERN
+    assert result.facts.era is Era.UNKNOWN
     assert result.results
     assert all(r.status is Status.SKIPPED for r in result.results)
     assert result.exit_code is ExitCode.PASSED
@@ -205,7 +235,9 @@ async def test_slow_starting_server_keeps_its_capabilities(tmp_path: Path) -> No
     assert result.facts is not None
     assert result.facts.capabilities_known
     assert "tools" in result.facts.capabilities
-    assert [r for r in result.results if r.status is not Status.PASSED] == []
+    ran = [r for r in result.results if r.status is not Status.SKIPPED]
+    assert len(ran) >= 16
+    assert [r for r in ran if r.status is not Status.PASSED] == []
 
 
 async def test_capabilities_recovered_when_first_discover_times_out(tmp_path: Path) -> None:

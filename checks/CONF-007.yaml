@@ -1,10 +1,12 @@
 id: CONF-007
 title: Origin header is validated on Streamable HTTP
 severity: error
-era: modern
+era: both
 spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#security--endpoint
 transports:
 - http
 description: 'Sends a valid request with Origin: https://mcpprobe-rebind.invalid. Servers
   MUST validate Origin to prevent DNS rebinding and MUST answer an invalid Origin with HTTP
-  403. Runs on modern servers only until legacy checks land in M2.'
+  403; the rule is the same in 2025-11-25 (https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#security-warning).
+  On servers that speak both eras it runs twice: once with modern requests, and once inside
+  a legacy initialize session as <ID>@legacy.'

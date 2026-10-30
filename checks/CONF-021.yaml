@@ -1,0 +1,9 @@
+id: CONF-021
+title: initialize answers an unsupported version with a supported one
+severity: warn
+era: legacy
+spec_ref: https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#version-negotiation
+description: Sends initialize asking for version 1900-01-01 on a fresh session. If the server
+  does not support the requested version it MUST respond with another protocol version it
+  supports, so the client can decide whether to continue. The same page's error-handling example
+  answers with a -32602 error instead, so an error is reported as a warning, not a failure.

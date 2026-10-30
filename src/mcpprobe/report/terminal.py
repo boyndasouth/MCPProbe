@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from mcpprobe.engine.catalog import Severity
 from mcpprobe.engine.runner import Status
-from mcpprobe.protocol.era import Era
+from mcpprobe.protocol.era import Era, ServerFacts
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,13 +24,23 @@ _STYLE = {
 }
 
 
+def _era_text(facts: ServerFacts) -> str:
+    if facts.era is Era.MODERN:
+        return "modern (2026-07-28)"
+    if facts.era is Era.LEGACY:
+        return f"legacy (initialize, negotiated {facts.legacy_version})"
+    if facts.era is Era.DUAL:
+        return (
+            f"dual: 2026-07-28 and initialize (negotiated {facts.legacy_version}); "
+            "both-era checks run once per era, legacy runs end in @legacy"
+        )
+    return "unknown: the server answered neither server/discover nor initialize"
+
+
 def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
     console.print(f"seed {result.seed}", highlight=False)
-    if result.facts is not None and result.facts.era is not Era.MODERN:
-        console.print(
-            "The server does not speak the 2026-07-28 revision, so modern checks are "
-            "skipped. Legacy-era checks arrive in milestone M2."
-        )
+    if result.facts is not None:
+        console.print(f"era: {_era_text(result.facts)}", highlight=False)
     if not result.results:
         console.print(
             "The server started and answered the liveness probe, but there are no "

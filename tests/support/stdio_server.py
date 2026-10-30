@@ -10,6 +10,9 @@ Reads newline-delimited JSON and answers by ``method``:
   grandchild-> spawns a long-sleeping grandchild, prints its pid
   silent    -> no answer
 Anything unparsable gets an error response with id null.
+
+With ``--modern`` it also answers ``server/discover``, so MCPProbe classifies
+it as a modern server and runs cases against it; without, its era is unknown.
 """
 
 import json
@@ -22,6 +25,9 @@ def write(obj: object) -> None:
     sys.stdout.write(json.dumps(obj, separators=(",", ":"), sort_keys=True) + "\n")
     sys.stdout.flush()
 
+
+MODERN = "--modern" in sys.argv[1:]
+DISCOVER = {"resultType": "complete", "supportedVersions": ["2026-07-28"], "capabilities": {}}
 
 for raw in sys.stdin:
     try:
@@ -41,8 +47,10 @@ for raw in sys.stdin:
     if method == "log":
         sys.stderr.write("server log line\n")
         sys.stderr.flush()
-    if method == "big":
-        result: object = {"data": "x" * int(params["size"])}
+    if method == "server/discover" and MODERN:
+        result: object = DISCOVER
+    elif method == "big":
+        result = {"data": "x" * int(params["size"])}
     elif method == "secret":
         result = {"secret": os.environ.get("PROBE_SECRET", "")}
     elif method == "grandchild":

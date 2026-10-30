@@ -3,11 +3,11 @@
 Tells an MCP server author, in one run, whether their server is spec-compliant,
 robust to bad input, and usable by a real model.
 
-> **Status: v0.1.0, pre-alpha.** 17 conformance checks for the stateless
-> **2026-07-28** revision of the Model Context Protocol, over stdio and
-> Streamable HTTP. Servers that don't speak 2026-07-28 yet get those checks
-> skipped, never failed; legacy (`initialize`-era) and dual-era checks arrive
-> in the next milestone.
+> **Status: pre-alpha (M2 in progress).** 21 conformance checks over stdio and
+> Streamable HTTP for the stateless **2026-07-28** revision *and* the legacy
+> `initialize` era (2025-11-25, 2025-06-18). Each server is classified as
+> modern, legacy, dual-era or unknown, and only the checks for the era(s) it
+> speaks run.
 
 Every check cites the spec section it enforces, every failure is saved as a
 byte-for-byte replayable case, and the same seed always gives the same report.
@@ -25,8 +25,9 @@ uv add git+https://github.com/boyndasouth/MCPProbe@v0.1.0
 ## Usage
 
 ```bash
-# A stdio server: give the command that starts it
-mcpprobe run --stdio "npx -y @modelcontextprotocol/server-everything"
+# A stdio server: give the command that starts it. Pin @latest with npx:
+# a bare `npx -y pkg` silently reuses whatever version it cached first.
+mcpprobe run --stdio "npx -y @modelcontextprotocol/server-everything@latest"
 mcpprobe run --stdio "python -m my_server" --env API_KEY=...
 
 # A Streamable HTTP server
@@ -62,30 +63,47 @@ Useful options for `run`:
 | 2 | Probe could not run (server didn't start, unreachable) |
 | 3 | Config or invocation invalid |
 
+## Eras
+
+Before any check runs, MCPProbe asks `server/discover` (the 2026-07-28 way)
+and, failing that, `initialize` (the legacy way), then probes a modern server
+with `initialize` on a fresh process or session to spot dual-era servers.
+
+| Era | Meaning | What runs |
+|---|---|---|
+| modern | Speaks 2026-07-28 only | Modern and both-era checks |
+| legacy | Speaks an `initialize`-era revision only | Legacy and both-era checks, inside a legacy session |
+| dual | Speaks both | Everything; both-era checks run twice, the legacy run suffixed `@legacy` |
+| unknown | Answered neither way | Nothing |
+
 ## Checks
 
 `error` checks enforce a MUST and fail the run; `warn` enforces a SHOULD or
 flags a deprecated feature; `info` is advice and shows as a note.
 
-| ID | Severity | Transports | Check |
+| ID | Severity | Era | Check |
 |---|---|---|---|
-| CONF-001 | error | stdio, http | server/discover exists and lists supported versions and capabilities |
-| CONF-002 | error | stdio, http | Requests missing required `_meta` fields are rejected with -32602 |
-| CONF-003 | error | stdio, http | Unsupported protocol version returns -32022 with `data.supported` |
-| CONF-004 | error | stdio, http | Every result carries `resultType` |
-| CONF-005 | error | stdio, http | Request ids: null is rejected and responses echo the id exactly |
-| CONF-006 | error | http | HTTP headers that disagree with the body are rejected with -32020 |
-| CONF-007 | error | http | Origin header is validated on Streamable HTTP |
-| CONF-008 | info | stdio, http | Unknown tools get a JSON-RPC error, not a tool result |
-| CONF-009 | error | stdio, http | Undeclared client capabilities are never relied on |
-| CONF-010 | error | stdio, http | `input_required` results are well formed and only used where allowed |
-| CONF-011 | error | stdio, http | `structuredContent` matches the tool's `outputSchema` |
-| CONF-012 | warn | stdio, http | `tools/list` returns tools in a deterministic order |
-| CONF-015 | error | stdio | stdout carries only newline-delimited JSON-RPC messages |
-| CONF-016 | warn | stdio, http | Deprecated logging capability is declared |
-| CONF-017 | warn | stdio, http | Results identify the server in `_meta` serverInfo |
-| CONF-018 | error | stdio, http | Cacheable results carry `ttlMs` and `cacheScope` |
-| CONF-020 | error | stdio, http | Protocol version is read from each request, not remembered |
+| CONF-001 | error | modern | server/discover exists and lists supported versions and capabilities |
+| CONF-002 | error | modern | Requests missing required `_meta` fields are rejected with -32602 |
+| CONF-003 | error | modern | Unsupported protocol version returns -32022 with `data.supported` |
+| CONF-004 | error | modern | Every result carries `resultType` |
+| CONF-005 | error | both | Request ids: null is rejected and responses echo the id exactly |
+| CONF-006 | error | modern, HTTP | HTTP headers that disagree with the body are rejected with -32020 |
+| CONF-007 | error | both, HTTP | Origin header is validated on Streamable HTTP |
+| CONF-008 | info | both | Unknown tools get a JSON-RPC error, not a tool result |
+| CONF-009 | error | modern | Undeclared client capabilities are never relied on |
+| CONF-010 | error | modern | `input_required` results are well formed and only used where allowed |
+| CONF-011 | error | both | `structuredContent` matches the tool's `outputSchema` |
+| CONF-012 | warn | modern | `tools/list` returns tools in a deterministic order |
+| CONF-013 | error | legacy | `initialize` handshake and version negotiation |
+| CONF-014 | warn | modern | Initialize-era versions listed in `supportedVersions` really work |
+| CONF-015 | error | both, stdio | stdout carries only newline-delimited JSON-RPC messages |
+| CONF-016 | warn | modern | Deprecated logging capability is declared |
+| CONF-017 | warn | modern | Results identify the server in `_meta` serverInfo |
+| CONF-018 | error | modern | Cacheable results carry `ttlMs` and `cacheScope` |
+| CONF-020 | error | modern | Protocol version is read from each request, not remembered |
+| CONF-021 | warn | legacy | `initialize` answers an unsupported version with a supported one |
+| CONF-022 | info | legacy | Server negotiates an outdated revision (2025-03-26 or older) |
 
 `mcpprobe checks explain <ID>` prints what a check sends, what it expects,
 and a link to the spec section.
@@ -120,7 +138,7 @@ every saved recording; pass them again to `replay`.
 |---|---|
 | M0 (done) | Raw wire client, recorder, replay, runner |
 | M1 (done, v0.1.0) | Conformance checks for 2026-07-28, JSON report |
-| M2 | Legacy and dual-era detection and checks |
+| M2 (in progress) | Legacy and dual-era detection and checks |
 | M3 | Schema fuzzing (FUZZ) and robustness (ROB) suites |
 | M4 | Security suite, SARIF/JUnit/HTML reports, GitHub Action, `--baseline` |
 | M5 | Model-in-the-loop usability evaluation (EVAL, opt-in) |

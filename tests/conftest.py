@@ -20,6 +20,12 @@ def stdio_argv() -> list[str]:
 
 
 @pytest.fixture
+def modern_stdio_argv(stdio_argv: list[str]) -> list[str]:
+    """The echo server, answering server/discover so it counts as modern."""
+    return [*stdio_argv, "--modern"]
+
+
+@pytest.fixture
 def http_url() -> Iterator[str]:
     server, url = serve()
     yield url

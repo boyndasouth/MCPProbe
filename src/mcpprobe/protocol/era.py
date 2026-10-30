@@ -1,23 +1,23 @@
-"""Which protocol era a server speaks, decided once per run.
+"""Which protocol era(s) a server speaks, decided once per run.
 
-Follows the 2026-07-28 backward-compatibility rules
-(basic/versioning#backward-compatibility-with-initialization-based-versions):
+Spec: 2026-07-28 basic/versioning#backward-compatibility-with-initialization-based-versions
+and the stdio / Streamable HTTP "Backward Compatibility" sections.
 
-- stdio: send ``server/discover``. A ``DiscoverResult`` or a recognized modern
-  error means modern; any other error, or silence, means not modern. The
-  fallback is never keyed to one specific error code.
-- HTTP: a modern request that succeeds, or that fails with a recognized
-  modern JSON-RPC error in the body, means modern.
+1. Send ``server/discover`` first (stdio requires it before anything else).
+   A DiscoverResult, or a recognized modern JSON-RPC error, means modern.
+   The fallback is never keyed to one specific error code, and silence also
+   means "not modern".
+2. Not modern: try ``initialize`` on the same connection. An InitializeResult
+   means legacy.
+3. Neither: a modern ``tools/list`` catches modern servers that lack
+   ``server/discover`` (itself a CONF-001 violation). A result carrying
+   ``resultType``, or a modern error, means modern; that can only add
+   findings for modern servers, never invent them for legacy ones.
+4. Modern: try ``initialize`` on a *fresh* connection (a new process for
+   stdio, a new session for HTTP), so the probe cannot disturb the modern
+   connection. An InitializeResult there means dual-era.
 
-One addition for conformance testing: a server that lacks ``server/discover``
-(itself a violation, CONF-001) would look legacy by those rules. So when
-discover fails, a modern ``tools/list`` is tried; a result carrying
-``resultType``, or a modern error, still identifies a modern server. A legacy
-server that answers ``tools/list`` without ``resultType`` stays legacy, so
-this can only add findings for modern servers, never invent them for legacy
-ones.
-
-Full legacy and dual-era classification arrives in milestone M2.
+Anything else is ``unknown``: the server answered, but neither era's way.
 """
 
 from __future__ import annotations
@@ -26,16 +26,29 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from mcpprobe.protocol import legacy
 from mcpprobe.protocol.modern import METHOD_NOT_FOUND, MODERN_ERROR_CODES, request
 from mcpprobe.transport.errors import TransportError
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from mcpprobe.engine.connection import Connection, Reply
 
 
 class Era(StrEnum):
     MODERN = "modern"
-    NOT_MODERN = "not-modern"
+    LEGACY = "legacy"
+    DUAL = "dual"
+    UNKNOWN = "unknown"
+
+    @property
+    def speaks_modern(self) -> bool:
+        return self in (Era.MODERN, Era.DUAL)
+
+    @property
+    def speaks_legacy(self) -> bool:
+        return self in (Era.LEGACY, Era.DUAL)
 
 
 @dataclass(frozen=True)
@@ -43,6 +56,8 @@ class ServerFacts:
     era: Era
     discover: dict[str, Any] | None = None
     """The DiscoverResult, when ``server/discover`` answered with one."""
+    initialize: dict[str, Any] | None = None
+    """The InitializeResult, when ``initialize`` answered with one."""
 
     @property
     def capabilities_known(self) -> bool:
@@ -50,8 +65,19 @@ class ServerFacts:
 
     @property
     def capabilities(self) -> dict[str, Any]:
+        """Modern capabilities, from server/discover."""
         caps = (self.discover or {}).get("capabilities")
         return caps if isinstance(caps, dict) else {}
+
+    @property
+    def legacy_capabilities(self) -> dict[str, Any]:
+        caps = (self.initialize or {}).get("capabilities")
+        return caps if isinstance(caps, dict) else {}
+
+    @property
+    def legacy_version(self) -> str | None:
+        version = (self.initialize or {}).get("protocolVersion")
+        return version if isinstance(version, str) else None
 
 
 def _modern_error(reply: Reply) -> bool:
@@ -66,9 +92,9 @@ def _modern_error(reply: Reply) -> bool:
     return reply.http_status == 404 and code == METHOD_NOT_FOUND
 
 
-async def _discover(connection: Connection, request_id: str, timeout: float) -> Reply | None:
+async def _call(connection: Connection, message: dict[str, Any], timeout: float) -> Reply | None:
     try:
-        return await connection.call(request("server/discover", request_id), timeout)
+        return await connection.call(message, timeout)
     except TransportError:
         return None
 
@@ -78,25 +104,63 @@ def _discover_result(reply: Reply | None) -> dict[str, Any] | None:
     return result if isinstance(result, dict) and "supportedVersions" in result else None
 
 
-async def detect_era(
-    connection: Connection, timeout: float, startup_timeout: float | None = None
-) -> ServerFacts:
-    """``startup_timeout`` bounds the first request, which includes server start-up
-    (a cold ``npx`` or ``uvx`` can take many seconds); later requests use ``timeout``."""
-    reply = await _discover(connection, "mcpprobe-era-discover", startup_timeout or timeout)
-    if (found := _discover_result(reply)) is not None:
-        return ServerFacts(Era.MODERN, found)
-    if reply is not None and _modern_error(reply):
-        return ServerFacts(Era.MODERN)
-
-    try:
-        reply = await connection.call(request("tools/list", "mcpprobe-era-tools"), timeout)
-    except TransportError:
-        return ServerFacts(Era.NOT_MODERN)
+def _initialize_result(reply: Reply | None) -> dict[str, Any] | None:
+    if legacy.negotiated_version(reply) is None:
+        return None
+    assert reply is not None
     result = reply.result
-    if not ((isinstance(result, dict) and "resultType" in result) or _modern_error(reply)):
-        return ServerFacts(Era.NOT_MODERN)
-    # Modern after all. If discover only missed its window, ask once more so
-    # the checks get the real capabilities instead of an empty set.
-    retry = await _discover(connection, "mcpprobe-era-discover-retry", timeout)
-    return ServerFacts(Era.MODERN, _discover_result(retry))
+    return result if isinstance(result, dict) else None
+
+
+async def _legacy_probe(connection: Connection, timeout: float) -> dict[str, Any] | None:
+    try:
+        reply = await legacy.open_session(connection, timeout, request_id="mcpprobe-era-initialize")
+    except TransportError:
+        return None
+    return _initialize_result(reply)
+
+
+async def detect_era(
+    connection: Connection,
+    timeout: float,
+    startup_timeout: float | None = None,
+    open_fresh: Callable[[], Awaitable[Connection]] | None = None,
+) -> ServerFacts:
+    """Classify the server. ``startup_timeout`` bounds the first request, which
+    includes start-up (a cold ``npx`` or ``uvx`` can take many seconds).
+    ``open_fresh`` opens a new, started connection for the dual-era probe;
+    without it a modern server is reported as modern only."""
+    reply = await _call(
+        connection, request("server/discover", "mcpprobe-era-discover"), startup_timeout or timeout
+    )
+    discover = _discover_result(reply)
+    modern = discover is not None or (reply is not None and _modern_error(reply))
+
+    if not modern:
+        initialize = await _legacy_probe(connection, timeout)
+        if initialize is not None:
+            return ServerFacts(Era.LEGACY, initialize=initialize)
+        reply = await _call(connection, request("tools/list", "mcpprobe-era-tools"), timeout)
+        result = None if reply is None else reply.result
+        modern = reply is not None and (
+            (isinstance(result, dict) and "resultType" in result) or _modern_error(reply)
+        )
+        if not modern:
+            return ServerFacts(Era.UNKNOWN)
+        # Modern after all. If discover only missed its window, ask once more so
+        # the checks get the real capabilities instead of an empty set.
+        retry = await _call(
+            connection, request("server/discover", "mcpprobe-era-discover-retry"), timeout
+        )
+        discover = _discover_result(retry)
+
+    if open_fresh is None:
+        return ServerFacts(Era.MODERN, discover)
+    fresh = await open_fresh()
+    try:
+        initialize = await _legacy_probe(fresh, startup_timeout or timeout)
+    finally:
+        await fresh.close()
+    if initialize is not None:
+        return ServerFacts(Era.DUAL, discover, initialize)
+    return ServerFacts(Era.MODERN, discover)

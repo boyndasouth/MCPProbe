@@ -8,6 +8,8 @@ gives each check its failing ("bad") and passing ("good") fixture.
     python reference.py                          # stdio, conformant
     python reference.py --break CONF-004         # stdio, results lack resultType
     python reference.py --http 0                 # HTTP on a free port (printed on stderr)
+    python reference.py --era legacy             # initialize-era only (2025-11-25, 2025-06-18)
+    python reference.py --era dual               # both eras; legacy sessions per process/session
 
 Breakable checks: see BREAKS below.
 """
@@ -24,6 +26,8 @@ from typing import Any
 
 VERSION = "2026-07-28"
 SUPPORTED = [VERSION]
+LEGACY_SUPPORTED = ["2025-11-25", "2025-06-18"]
+SESSION_HEADER = "Mcp-Session-Id"
 PV = "io.modelcontextprotocol/protocolVersion"
 CAPS = "io.modelcontextprotocol/clientCapabilities"
 SERVER_INFO = {"name": "mcpprobe-reference", "version": "1.0.0"}
@@ -46,7 +50,12 @@ BREAKS = {
     "CONF-009": "ask_name sends an elicitation input request the client never declared",
     "CONF-010": "ask_name's input_required result has neither inputRequests nor requestState",
     "CONF-011": "weather returns structuredContent that does not match its outputSchema",
+    "CONF-013": "InitializeResult lacks serverInfo, and an unsupported version is agreed to",
+    "CONF-014": "server/discover lists 2024-11-05, which initialize does not support",
+    "CONF-021": "initialize answers an unsupported version with an error",
+    "CONF-022": "only the outdated 2025-03-26 revision is offered",
 }
+ERAS = ("modern", "legacy", "dual")
 
 TOOLS = [
     {
@@ -104,15 +113,37 @@ class Rpc(Exception):
 
 
 class Server:
-    def __init__(self, breaks: set[str]) -> None:
+    def __init__(self, breaks: set[str], era: str = "modern") -> None:
         self.breaks = breaks
+        self.era = era
         self.list_calls = 0
         self.remembered_version: str | None = None
         self.lock = threading.Lock()
+        self.sessions: dict[str, str] = {}
+        """Legacy sessions: id -> negotiated version ("stdio" for the process)."""
+        self.session_counter = 0
+
+    @property
+    def legacy_supported(self) -> list[str]:
+        return ["2025-03-26"] if "CONF-022" in self.breaks else list(LEGACY_SUPPORTED)
+
+    @property
+    def advertised_versions(self) -> list[str]:
+        """supportedVersions in server/discover."""
+        if self.era != "dual":
+            return list(SUPPORTED)
+        versions = SUPPORTED + self.legacy_supported
+        if "CONF-014" in self.breaks:
+            versions.append("2024-11-05")
+        return versions
 
     # ------------------------------------------------------------ results
 
-    def _result(self, body: dict[str, Any], *, cacheable: bool = False) -> dict[str, Any]:
+    def _result(
+        self, body: dict[str, Any], *, cacheable: bool = False, legacy: bool = False
+    ) -> dict[str, Any]:
+        if legacy:
+            return body  # initialize-era results carry none of the modern fields
         if "CONF-004" not in self.breaks:
             body["resultType"] = "complete"
         if cacheable and "CONF-018" not in self.breaks:
@@ -144,30 +175,36 @@ class Server:
                 {"supported": SUPPORTED, "requested": version},
             )
 
-    def dispatch(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        if method == "server/discover" and "CONF-001" not in self.breaks:
+    def dispatch(
+        self, method: str, params: dict[str, Any], *, legacy: bool = False
+    ) -> dict[str, Any]:
+        if legacy and method == "ping":
+            return {}
+        if not legacy and method == "server/discover" and "CONF-001" not in self.breaks:
             caps: dict[str, Any] = {"tools": {}}
             if "CONF-016" in self.breaks:
                 caps["logging"] = {}
             return self._result(
-                {"supportedVersions": SUPPORTED, "capabilities": caps}, cacheable=True
+                {"supportedVersions": self.advertised_versions, "capabilities": caps},
+                cacheable=True,
             )
         if method == "tools/list":
-            tools = list(TOOLS)
+            # ask_name needs multi round-trip requests, which legacy sessions lack.
+            tools = [t for t in TOOLS if not (legacy and t["name"] == "ask_name")]
             with self.lock:
                 self.list_calls += 1
                 if "CONF-012" in self.breaks and self.list_calls % 2 == 0:
                     tools.reverse()
-            return self._result({"tools": tools}, cacheable=True)
+            return self._result({"tools": tools}, cacheable=True, legacy=legacy)
         if method == "tools/call":
             name = params.get("name")
             arguments = params.get("arguments") or {}
             if name == "echo":
                 text = str(arguments.get("message", ""))
-                return self._result({"content": [{"type": "text", "text": text}]})
+                return self._result({"content": [{"type": "text", "text": text}]}, legacy=legacy)
             if name == "get_time":
-                return self._result({"content": [{"type": "text", "text": "12:00"}]})
-            if name == "ask_name":
+                return self._result({"content": [{"type": "text", "text": "12:00"}]}, legacy=legacy)
+            if name == "ask_name" and not legacy:
                 return self._ask_name(params)
             if name == "weather":
                 city = str(arguments.get("city", "Austin"))
@@ -176,7 +213,8 @@ class Server:
                     data["celsius"] = "warm"
                 text = json.dumps(data)
                 return self._result(
-                    {"content": [{"type": "text", "text": text}], "structuredContent": data}
+                    {"content": [{"type": "text", "text": text}], "structuredContent": data},
+                    legacy=legacy,
                 )
             if name == "delete_everything":
                 sys.stderr.write("delete_everything was called\n")
@@ -184,9 +222,59 @@ class Server:
                 raise SystemExit(99)
             if "CONF-008" in self.breaks:
                 text = f"Unknown tool: {name}"
-                return self._result({"content": [{"type": "text", "text": text}], "isError": True})
-            raise Rpc(-32602, f"Unknown tool: {name}")
-        raise Rpc(-32601, "Method not found", status=404)
+                return self._result(
+                    {"content": [{"type": "text", "text": text}], "isError": True}, legacy=legacy
+                )
+            raise Rpc(-32602, f"Unknown tool: {name}", status=200 if legacy else 400)
+        # A legacy server answers unknown methods like most 2025-era SDKs: HTTP 200
+        # with a JSON-RPC error. A modern one uses 404 (streamable-http).
+        raise Rpc(-32601, "Method not found", status=200 if legacy else 404)
+
+    # ------------------------------------------------------------ legacy era
+
+    def _initialize(self, params: dict[str, Any]) -> tuple[dict[str, Any], str]:
+        """2025-11-25 lifecycle: answer with the requested version if supported,
+        otherwise with another version this server supports."""
+        requested = params.get("protocolVersion")
+        supported = self.legacy_supported
+        if requested in supported:
+            negotiated = str(requested)
+        elif "CONF-013" in self.breaks and isinstance(requested, str):
+            negotiated = requested  # agrees to a version it cannot speak
+        elif "CONF-021" in self.breaks:
+            raise Rpc(
+                -32602,
+                "Unsupported protocol version",
+                {"supported": supported, "requested": requested},
+                status=200,
+            )
+        else:
+            negotiated = supported[0]
+        result: dict[str, Any] = {"protocolVersion": negotiated, "capabilities": {"tools": {}}}
+        if "CONF-013" not in self.breaks:
+            result["serverInfo"] = SERVER_INFO
+        return result, negotiated
+
+    def _legacy(
+        self, method: str, params: dict[str, Any], session: str | None, http: bool
+    ) -> tuple[dict[str, Any], str | None]:
+        """One legacy request. Returns (result, newly assigned session id)."""
+        if method == "initialize":
+            result, negotiated = self._initialize(params)
+            with self.lock:
+                if http:
+                    self.session_counter += 1
+                    new_id = f"session-{self.session_counter}"
+                    self.sessions[new_id] = negotiated
+                    return result, new_id
+                self.sessions["stdio"] = negotiated
+            return result, None
+        key = session if http else "stdio"
+        if key is None or key not in self.sessions:
+            if http and key is not None:
+                raise Rpc(-32600, "Unknown or terminated session", status=404)
+            raise Rpc(-32600, "Server not initialized", status=400)
+        return self.dispatch(method, params, legacy=True), None
 
     def _ask_name(self, params: dict[str, Any]) -> dict[str, Any]:
         """Multi round-trip request (mrtr#basic-workflow)."""
@@ -227,32 +315,49 @@ class Server:
 
     # ------------------------------------------------------------ messages
 
-    def handle(self, raw: bytes) -> tuple[int, dict[str, Any] | None]:
-        """Process one message. Returns (HTTP status, response or None)."""
+    def is_modern(self, message: Any) -> bool:
+        """Which era a message belongs to, for this server."""
+        if self.era == "modern":
+            return True
+        if self.era == "legacy":
+            return False
+        params = message.get("params") if isinstance(message, dict) else None
+        meta = params.get("_meta") if isinstance(params, dict) else None
+        return isinstance(meta, dict) and PV in meta
+
+    def handle(
+        self, raw: bytes, session: str | None = None, *, http: bool = False
+    ) -> tuple[int, dict[str, Any] | None, str | None]:
+        """Process one message. Returns (HTTP status, response or None, new session id)."""
         try:
             message = json.loads(raw)
         except ValueError:
-            return 400, _error(None, Rpc(-32700, "Parse error"))
+            return 400, _error(None, Rpc(-32700, "Parse error")), None
         if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
-            return 400, _error(None, Rpc(-32600, "Invalid Request"))
+            return 400, _error(None, Rpc(-32600, "Invalid Request")), None
         method = message.get("method")
         if not isinstance(method, str):
-            return 400, _error(None, Rpc(-32600, "Invalid Request"))
+            return 400, _error(None, Rpc(-32600, "Invalid Request")), None
         if "id" not in message:
-            return 202, None  # notification: accept, never answer
+            return 202, None, None  # notification: accept, never answer
         mid = message["id"]
         if mid is None or isinstance(mid, (bool, float, list, dict)):
-            return 400, _error(None, Rpc(-32600, "Invalid Request: id must be a string or integer"))
+            bad_id = Rpc(-32600, "Invalid Request: id must be a string or integer")
+            return 400, _error(None, bad_id), None
         if "CONF-005" in self.breaks and isinstance(mid, int):
             mid = str(mid)
         params = message.get("params")
         params = params if isinstance(params, dict) else {}
+        new_session: str | None = None
         try:
-            self._check_meta(method, params)
-            result = self.dispatch(method, params)
+            if self.is_modern(message):
+                self._check_meta(method, params)
+                result = self.dispatch(method, params)
+            else:
+                result, new_session = self._legacy(method, params, session, http)
         except Rpc as exc:
-            return exc.status, _error(mid, exc)
-        return 200, {"jsonrpc": "2.0", "id": mid, "result": result}
+            return exc.status, _error(mid, exc), None
+        return 200, {"jsonrpc": "2.0", "id": mid, "result": result}, new_session
 
 
 def _error(mid: Any, exc: Rpc) -> dict[str, Any]:
@@ -280,7 +385,7 @@ def serve_stdio(server: Server) -> None:
     for raw in sys.stdin.buffer:
         if not raw.strip():
             continue
-        _, response = server.handle(raw)
+        _, response, _ = server.handle(raw)
         if response is not None:
             out.write(_dump(response) + b"\n")
             out.flush()
@@ -307,14 +412,14 @@ def _origin_allowed(origin: str) -> bool:
 
 
 def _header_mismatch(server: Server, headers: Any, raw: bytes) -> str | None:
-    """Server validation (streamable-http#server-validation)."""
+    """Server validation (streamable-http#server-validation), modern requests only."""
     if "CONF-006" in server.breaks:
         return None
     try:
         message = json.loads(raw)
     except ValueError:
         return None
-    if not isinstance(message, dict) or "id" not in message:
+    if not isinstance(message, dict) or "id" not in message or not server.is_modern(message):
         return None
     params = message.get("params") if isinstance(message.get("params"), dict) else {}
     meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
@@ -345,9 +450,13 @@ def make_http_server(server: Server, port: int = 0) -> ThreadingHTTPServer:
         def log_message(self, format: str, *args: Any) -> None:
             pass
 
-        def _send(self, status: int, body: dict[str, Any] | None) -> None:
+        def _send(
+            self, status: int, body: dict[str, Any] | None, session: str | None = None
+        ) -> None:
             data = b"" if body is None else _dump(body)
             self.send_response(status)
+            if session is not None:
+                self.send_header(SESSION_HEADER, session)
             if body is not None:
                 self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
@@ -377,8 +486,16 @@ def make_http_server(server: Server, port: int = 0) -> ThreadingHTTPServer:
                     mid = None
                 self._send(400, _error(mid, Rpc(-32020, f"Header mismatch: {mismatch}")))
                 return
-            status, response = server.handle(raw)
-            self._send(status, response)
+            session = self.headers.get(SESSION_HEADER)
+            version = self.headers.get("MCP-Protocol-Version")
+            # 2025-11-25 transports#protocol-version-header: invalid or unsupported -> 400.
+            known_session = session is not None and session in server.sessions
+            if known_session and version is not None and version not in server.legacy_supported:
+                error = Rpc(-32600, f"Unsupported MCP-Protocol-Version: {version}")
+                self._send(400, _error(None, error))
+                return
+            status, response, new_session = server.handle(raw, session, http=True)
+            self._send(status, response, new_session)
 
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     httpd.daemon_threads = True
@@ -396,8 +513,9 @@ def main(argv: list[str] | None = None) -> None:
         help="violate this check",
     )
     parser.add_argument("--http", type=int, metavar="PORT", help="serve HTTP instead of stdio")
+    parser.add_argument("--era", choices=ERAS, default="modern", help="protocol era(s) to speak")
     args = parser.parse_args(argv)
-    server = Server(set(args.breaks))
+    server = Server(set(args.breaks), args.era)
     if args.http is None:
         serve_stdio(server)
         return

@@ -8,6 +8,27 @@ versioned and never silently reused.
 
 ## [Unreleased]
 
+### Added
+- Era detection classifies every server as modern, legacy, dual-era or
+  unknown: `server/discover` first, then `initialize`, and a dual-era probe
+  on a fresh process or session so it never disturbs the modern connection.
+- Legacy sessions: the `initialize` handshake, `Mcp-Session-Id` and the
+  `MCP-Protocol-Version` header on Streamable HTTP. MCPProbe declares no
+  client capabilities in them.
+- CONF-005, 007, 008, 011 and 015 now run on legacy servers too; on dual-era
+  servers they run once per era, the legacy run suffixed `@legacy`.
+- CONF-013 (legacy handshake and version negotiation), CONF-014 (warn:
+  initialize-era versions listed in supportedVersions really work), CONF-021
+  (warn: unsupported version answered with an error instead of a counter-offer)
+  and CONF-022 (info: outdated revision).
+- Reference fixture server: `--era legacy|dual`, with stateful legacy sessions
+  over stdio and HTTP.
+
+### Changed
+- CONF-002 accepts any error for a request missing `protocolVersion` on a
+  dual-era server, which cannot tell which era such a request belongs to.
+- The terminal report states the detected era.
+
 ## [0.1.0] - 2026-10-30
 
 First release (milestones M0 and M1): 17 conformance checks for the

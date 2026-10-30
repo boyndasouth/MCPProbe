@@ -74,8 +74,8 @@ async def _fail(ctx: CaseContext) -> Outcome:
 
 
 @pytest.fixture
-def stdio_spec(stdio_argv: list[str]) -> StdioServer:
-    return StdioServer(tuple(stdio_argv))
+def stdio_spec(modern_stdio_argv: list[str]) -> StdioServer:
+    return StdioServer(tuple(modern_stdio_argv))
 
 
 def _runner(spec: StdioServer | HttpServer, tmp_path: Path, **kwargs: object) -> Runner:
@@ -183,12 +183,38 @@ async def test_case_order_is_seeded(stdio_spec: StdioServer, tmp_path: Path) -> 
 
 
 async def test_restart_limit_skips_remaining(stdio_spec: StdioServer, tmp_path: Path) -> None:
-    cases = [custom_case("CONF-A", _crash), echo_case("CONF-B")]
-    runner = _runner(stdio_spec, tmp_path, max_restarts=0)
-    result = await runner.run([(Suite.CONF, cases)])
-    by_id = {r.case_id: r for r in result.results}
-    assert by_id["CONF-A"].status is Status.CRASHED
-    assert by_id["CONF-B"].status is Status.SKIPPED
+    # Order-independent: every case that ran before the crash passed, every case
+    # after it was skipped because the server could not be restarted. Several
+    # seeds, so at least one puts the crash before other cases.
+    skipped_somewhere = False
+    for seed in (1, 2, 3, 4):
+        ran: list[str] = []
+
+        def logged(case_id: str, log: list[str] = ran) -> Case:
+            async def run(ctx: CaseContext) -> Outcome:
+                log.append(ctx.case_id)
+                return Outcome.passed()
+
+            return custom_case(case_id, run)
+
+        cases = [custom_case("CONF-A", _crash), *(logged(f"CONF-B{i}") for i in range(6))]
+        runner = Runner(
+            stdio_spec,
+            seed,
+            tmp_path / "cases",
+            case_timeout=3.0,
+            liveness_timeout=3.0,
+            max_restarts=0,
+        )
+        result = await runner.run([(Suite.CONF, cases)])
+        by_id = {r.case_id: r for r in result.results}
+        assert by_id.pop("CONF-A").status is Status.CRASHED
+        assert result.restarts == 0
+        for case_id, case_result in by_id.items():
+            expected = Status.PASSED if case_id in ran else Status.SKIPPED
+            assert case_result.status is expected, (seed, case_id)
+        skipped_somewhere |= any(r.status is Status.SKIPPED for r in by_id.values())
+    assert skipped_somewhere
 
 
 async def test_server_that_never_answers_is_unavailable(tmp_path: Path) -> None:

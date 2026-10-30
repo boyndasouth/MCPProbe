@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from mcpprobe.engine.connection import HttpConnection, StdioConnection, encode
+from mcpprobe.protocol import legacy
 from mcpprobe.protocol.modern import request
 from mcpprobe.transport.errors import TransportTimeout
 
@@ -16,6 +17,21 @@ if TYPE_CHECKING:
 JsonObject = dict[str, Any]
 QUIET_WINDOW = 2.0
 """How long to wait when silence is an acceptable answer."""
+
+
+def era_request(
+    ctx: CaseContext, method: str, request_id: Any, params: JsonObject | None = None
+) -> JsonObject:
+    """A request in the case's era: modern ``_meta`` or plain legacy params."""
+    if ctx.mode == "legacy":
+        return legacy.request(method, request_id, params)
+    return request(method, request_id, params)
+
+
+async def era_call(
+    ctx: CaseContext, method: str, request_id: str, params: JsonObject | None = None
+) -> Reply:
+    return await ctx.connection.call(era_request(ctx, method, request_id, params), ctx.timeout)
 
 
 async def modern_call(

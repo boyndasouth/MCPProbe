@@ -1,0 +1,14 @@
+id: CONF-013
+title: Legacy initialize handshake and version negotiation
+severity: error
+era: legacy
+spec_ref: https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization
+description: 'Opens two fresh sessions (a new process on stdio, a new session on HTTP). handshake:
+  initialize asking for 2025-11-25 must return protocolVersion, a capabilities object and
+  serverInfo (the server MUST respond with its own capabilities and information); an Mcp-Session-Id,
+  if assigned, MUST be visible ASCII; notifications/initialized MUST get no reply (HTTP: 202
+  Accepted); and a tools/list (or ping) MUST then work. negotiation: initialize asking for
+  version 1900-01-01 must not be agreed to: if the server supports the requested version it
+  MUST answer with the same one, otherwise with another version it supports (#version-negotiation).
+  An error answer passes here because the spec''s own error-handling example shows one; CONF-021
+  notes it.'

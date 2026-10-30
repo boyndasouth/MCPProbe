@@ -1,10 +1,12 @@
 id: CONF-015
 title: 'stdio: stdout carries only newline-delimited JSON-RPC messages'
 severity: error
-era: modern
+era: both
 spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio#stdio
 transports:
 - stdio
-description: Inspects every line the server wrote to stdout during the suite. The server MUST
-  NOT write anything to stdout that is not a valid MCP message, and messages are newline-delimited.
-  Logging belongs on stderr.
+description: 'Inspects every line the server wrote to stdout during the suite. The server
+  MUST NOT write anything to stdout that is not a valid MCP message, and messages are newline-delimited.
+  Logging belongs on stderr. 2025-11-25 states the same rules (https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#stdio).
+  On servers that speak both eras it runs twice: once with modern requests, and once inside
+  a legacy initialize session as <ID>@legacy.'

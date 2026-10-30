@@ -16,6 +16,8 @@ from jsonschema.exceptions import SchemaError
 from mcpprobe.engine.catalog import Transport
 from mcpprobe.engine.connection import HttpConnection, StdioConnection, encode
 from mcpprobe.engine.runner import Outcome, Status
+from mcpprobe.protocol import legacy
+from mcpprobe.protocol.era import Era
 from mcpprobe.protocol.http_headers import request_metadata_headers
 from mcpprobe.protocol.instances import validator_for
 from mcpprobe.protocol.modern import (
@@ -34,6 +36,8 @@ from mcpprobe.protocol.modern import (
 from mcpprobe.suites.conf.helpers import (
     QUIET_WINDOW,
     describe,
+    era_call,
+    era_request,
     error_code,
     first_response,
     http_post,
@@ -46,12 +50,13 @@ from mcpprobe.suites.conf.tools import (
     call_tool,
     list_tools,
 )
+from mcpprobe.transport.errors import TransportTimeout
 from mcpprobe.transport.frames import StdioFrame
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from mcpprobe.engine.connection import Reply
+    from mcpprobe.engine.connection import Connection, Reply
     from mcpprobe.engine.runner import CaseContext
 
 ACCEPT = "application/json, text/event-stream"
@@ -59,14 +64,20 @@ JsonObject = dict[str, Any]
 
 
 def _has_tools(ctx: CaseContext) -> bool:
-    return "tools" in ctx.facts.capabilities
+    return "tools" in ctx.capabilities
+
+
+def _probe_method(ctx: CaseContext) -> str:
+    """A harmless request every server of the case's era must answer somehow."""
+    return "ping" if ctx.mode == "legacy" else "server/discover"
 
 
 def _no_tools(ctx: CaseContext) -> Outcome:
     """Skip reason for tool checks; honest about *why* tools are unavailable."""
-    if not ctx.facts.capabilities_known:
+    if not ctx.capabilities_known:
+        source = "initialize" if ctx.mode == "legacy" else "server/discover"
         return Outcome.skipped(
-            "server capabilities are unknown because server/discover did not return them"
+            f"server capabilities are unknown because {source} did not return them"
         )
     return Outcome.skipped("server does not declare the tools capability")
 
@@ -113,6 +124,15 @@ def conf_002(missing: str) -> Callable[[CaseContext], Awaitable[Outcome]]:
         else:
             reply = await ctx.connection.call(message, ctx.timeout)
             response, status = reply.response, None
+        if (
+            ctx.facts.era is Era.DUAL
+            and missing == PROTOCOL_VERSION
+            and response is not None
+            and isinstance(response.get("error"), dict)
+        ):
+            # Without protocolVersion a dual-era server cannot tell which era the
+            # request belongs to; refusing it as a legacy request is defensible.
+            return Outcome.passed()
         if error_code(response) != INVALID_PARAMS:
             return Outcome.failed(
                 f"request without {missing} got {describe(response, status)}, expected "
@@ -215,7 +235,7 @@ async def conf_004(ctx: CaseContext) -> Outcome:
 
 
 async def conf_005_null_id(ctx: CaseContext) -> Outcome:
-    message = request("server/discover", None)
+    message = era_request(ctx, _probe_method(ctx), None)
     response, status = await first_response(ctx, message, min(QUIET_WINDOW, ctx.timeout))
     # Rejecting with an error, or not answering at all, both refuse the request.
     if response is not None and "result" in response:
@@ -225,7 +245,9 @@ async def conf_005_null_id(ctx: CaseContext) -> Outcome:
 
 async def conf_005_echo(ctx: CaseContext) -> Outcome:
     for request_id in ("conf-005:é/1", 9007199254740991):
-        response, _ = await first_response(ctx, request("server/discover", request_id), ctx.timeout)
+        response, _ = await first_response(
+            ctx, era_request(ctx, _probe_method(ctx), request_id), ctx.timeout
+        )
         if response is None:
             return Outcome.failed(f"no response to a request with id {request_id!r}")
         got = response.get("id")
@@ -271,7 +293,7 @@ def _variant_text(variant: str) -> str:
 
 
 async def conf_007(ctx: CaseContext) -> Outcome:
-    body = encode(request("server/discover", "conf-007"))
+    body = encode(era_request(ctx, _probe_method(ctx), "conf-007"))
     connection = ctx.connection
     assert isinstance(connection, HttpConnection)
     headers = [*connection.conformant_headers(body), ("Origin", "https://mcpprobe-rebind.invalid")]
@@ -307,7 +329,7 @@ async def conf_012(ctx: CaseContext) -> Outcome:
 async def conf_015(ctx: CaseContext) -> Outcome:
     connection = ctx.connection
     assert isinstance(connection, StdioConnection)
-    await modern_call(ctx, "server/discover", "conf-015")
+    await era_call(ctx, _probe_method(ctx), "conf-015")
     for frame in connection.recorder.frames:
         if not (isinstance(frame, StdioFrame) and frame.stream == "stdout"):
             continue
@@ -380,7 +402,7 @@ async def conf_008(ctx: CaseContext) -> Outcome:
     name = UNKNOWN_TOOL
     while name in names:  # never call a real tool by accident
         name += "-x"
-    reply = await modern_call(ctx, "tools/call", "conf-008", {"name": name, "arguments": {}})
+    reply = await era_call(ctx, "tools/call", "conf-008", {"name": name, "arguments": {}})
     if reply.error is not None:
         return Outcome.passed()
     result = reply.result
@@ -540,6 +562,140 @@ async def conf_011(ctx: CaseContext) -> Outcome:
     return Outcome.passed()
 
 
+# --------------------------------------------- CONF-013 / 014 / 021 / 022 (eras)
+
+UNSUPPORTED_LEGACY_VERSION = "1900-01-01"
+VISIBLE_ASCII = frozenset(range(0x21, 0x7F))
+
+
+async def _fresh_initialize(
+    ctx: CaseContext, request_id: str, version: str
+) -> tuple[Connection, Reply | None]:
+    """initialize on a brand-new connection (a legacy session is single-use)."""
+    assert ctx.open_fresh is not None
+    fresh = await ctx.open_fresh()
+    try:
+        reply = await fresh.call(legacy.initialize(request_id, version), ctx.startup_timeout)
+    except TransportTimeout:
+        reply = None
+    return fresh, reply
+
+
+async def _initialized_problem(ctx: CaseContext, fresh: Connection) -> str | None:
+    """Send notifications/initialized; the server must accept it without a reply."""
+    body = encode(legacy.INITIALIZED)
+    if isinstance(fresh, HttpConnection):
+        exchange = await fresh.http.request("POST", body, fresh.conformant_headers(body))
+        if exchange.status != 202:
+            return f"notifications/initialized got HTTP {exchange.status}, expected 202 Accepted"
+        return None
+    assert isinstance(fresh, StdioConnection)
+    await fresh.stdio.send_line(body)
+    try:
+        while True:
+            line = await fresh.stdio.receive(min(QUIET_WINDOW, ctx.timeout))
+            try:
+                message = json.loads(line)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue  # CONF-015 reports non-JSON output
+            if isinstance(message, dict) and "method" not in message:
+                return "the server responded to notifications/initialized, a notification"
+    except TransportTimeout:
+        return None
+
+
+async def conf_013_handshake(ctx: CaseContext) -> Outcome:
+    fresh, reply = await _fresh_initialize(ctx, "conf-013-initialize", legacy.LATEST)
+    if reply is None or reply.response is None:
+        return Outcome.failed(f"no response to initialize within {ctx.startup_timeout:g}s")
+    result = reply.result
+    if not isinstance(result, dict):
+        return Outcome.failed(f"initialize returned {describe(reply.response, reply.http_status)}")
+    version = result.get("protocolVersion")
+    if not isinstance(version, str):
+        return Outcome.failed("InitializeResult has no protocolVersion string")
+    if not isinstance(result.get("capabilities"), dict):
+        return Outcome.failed("InitializeResult has no capabilities object")
+    info = result.get("serverInfo")
+    if not (isinstance(info, dict) and isinstance(info.get("name"), str)):
+        return Outcome.failed("InitializeResult has no serverInfo with a name")
+    session = fresh.session_id if isinstance(fresh, HttpConnection) else None
+    if session is not None and (not session or any(ord(c) not in VISIBLE_ASCII for c in session)):
+        return Outcome.failed("Mcp-Session-Id contains characters outside visible ASCII")
+    fresh.legacy_version = version
+    problem = await _initialized_problem(ctx, fresh)
+    if problem is not None:
+        return Outcome.failed(problem)
+    method = "tools/list" if "tools" in result["capabilities"] else "ping"
+    after = await fresh.call(legacy.request(method, "conf-013-operation"), ctx.timeout)
+    if after.error is not None or after.result is None:
+        return Outcome.failed(
+            f"after a completed handshake, {method} returned "
+            f"{describe(after.response, after.http_status)}"
+        )
+    return Outcome.passed()
+
+
+async def conf_013_negotiation(ctx: CaseContext) -> Outcome:
+    _, reply = await _fresh_initialize(ctx, "conf-013-version", UNSUPPORTED_LEGACY_VERSION)
+    if reply is None or reply.response is None:
+        return Outcome.failed(
+            f"no response to initialize with version {UNSUPPORTED_LEGACY_VERSION}"
+        )
+    if reply.error is not None:
+        return Outcome.passed()  # the spec's own example; CONF-021 notes it
+    offered = legacy.negotiated_version(reply)
+    if offered is None:
+        return Outcome.failed("InitializeResult has no protocolVersion string")
+    if offered == UNSUPPORTED_LEGACY_VERSION:
+        return Outcome.failed(
+            f"the server agreed to version {UNSUPPORTED_LEGACY_VERSION}, which it cannot "
+            "support; it must answer with a version it supports"
+        )
+    return Outcome.passed()
+
+
+async def conf_021(ctx: CaseContext) -> Outcome:
+    _, reply = await _fresh_initialize(ctx, "conf-021", UNSUPPORTED_LEGACY_VERSION)
+    if reply is None or reply.response is None:
+        return Outcome.skipped("initialize got no response (reported by CONF-013)")
+    if reply.error is not None:
+        return Outcome.failed(
+            f"initialize with an unsupported version got {describe(reply.response)} instead of "
+            "a result offering a version the server supports"
+        )
+    return Outcome.passed()
+
+
+async def conf_022(ctx: CaseContext) -> Outcome:
+    version = ctx.facts.legacy_version
+    if version in legacy.OUTDATED:
+        return Outcome.failed(
+            f"asked for {legacy.LATEST}, the server negotiated {version}; consider upgrading to "
+            f"{legacy.LATEST} or 2026-07-28"
+        )
+    return Outcome.passed()
+
+
+async def conf_014(ctx: CaseContext) -> Outcome:
+    versions = (ctx.facts.discover or {}).get("supportedVersions")
+    listed = [v for v in versions if v in legacy.VERSIONS] if isinstance(versions, list) else []
+    if not listed:
+        return Outcome.skipped("supportedVersions lists no initialize-era revision")
+    for version in sorted(listed):
+        _, reply = await _fresh_initialize(ctx, f"conf-014-{version}", version)
+        got = legacy.negotiated_version(reply)
+        if got != version:
+            answer = "no response" if reply is None else describe(reply.response, reply.http_status)
+            if got is not None:
+                answer = f"version {got}"
+            return Outcome.failed(
+                f"server/discover lists {version} in supportedVersions, but initialize with "
+                f"{version} got {answer}"
+            )
+    return Outcome.passed()
+
+
 # ------------------------------------------------------------------- registry
 
 # (check id, case suffix, implementation, transports it applies to)
@@ -572,9 +728,17 @@ CASES: list[CaseSpec] = [
     ("CONF-009", "", conf_009, BOTH),
     ("CONF-010", "", conf_010, BOTH),
     ("CONF-011", "", conf_011, BOTH),
+    ("CONF-013", "handshake", conf_013_handshake, BOTH),
+    ("CONF-013", "negotiation", conf_013_negotiation, BOTH),
+    ("CONF-014", "", conf_014, BOTH),
+    ("CONF-021", "", conf_021, BOTH),
+    ("CONF-022", "", conf_022, BOTH),
 ]
+
+# Cases that open their own connections: each one may pay a server start-up.
+FRESH_SESSIONS = {"CONF-013": 1, "CONF-014": len(legacy.VERSIONS), "CONF-021": 1}
 
 # Cases that call every safe tool get this multiple of the per-case timeout.
 TIMEOUT_FACTORS = {"CONF-009": 6.0, "CONF-010": 6.0, "CONF-011": 6.0}
 
-__all__ = ["CASES", "TIMEOUT_FACTORS", "VERSION"]
+__all__ = ["CASES", "FRESH_SESSIONS", "TIMEOUT_FACTORS", "VERSION"]

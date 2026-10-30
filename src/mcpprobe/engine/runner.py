@@ -25,16 +25,18 @@ Conformance errors stop later suites unless ``keep_going`` is set.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from mcpprobe.engine.catalog import Era as CheckEra
 from mcpprobe.engine.catalog import Severity, Suite
 from mcpprobe.engine.connection import Connection, ServerSpec, connect, recording_of
 from mcpprobe.engine.seed import rng
 from mcpprobe.exit_codes import ExitCode
+from mcpprobe.protocol import legacy
 from mcpprobe.protocol.era import Era, ServerFacts, detect_era
 from mcpprobe.protocol.modern import request as modern_request
 from mcpprobe.transport.errors import TransportClosed, TransportError, TransportTimeout
@@ -74,6 +76,10 @@ class Outcome:
         return cls(Status.SKIPPED, message)
 
 
+Mode = Literal["modern", "legacy"]
+LEGACY_SUFFIX = "@legacy"
+
+
 @dataclass(frozen=True)
 class CaseContext:
     connection: Connection
@@ -83,6 +89,25 @@ class CaseContext:
     rng: random.Random = field(repr=False)
     facts: ServerFacts = field(default_factory=lambda: ServerFacts(Era.MODERN))
     allow_destructive: bool = False
+    mode: Mode = "modern"
+    """Which era this case speaks: ``legacy`` means ``connection`` holds an
+    initialized legacy session."""
+    startup_timeout: float = 30.0
+    open_fresh: Callable[[], Awaitable[Connection]] | None = field(default=None, repr=False)
+    """Opens a new, started, uninitialized connection; closed after the case."""
+
+    @property
+    def capabilities(self) -> dict[str, Any]:
+        """Server capabilities for this case's era."""
+        if self.mode == "legacy":
+            return self.facts.legacy_capabilities
+        return self.facts.capabilities
+
+    @property
+    def capabilities_known(self) -> bool:
+        if self.mode == "legacy":
+            return self.facts.initialize is not None
+        return self.facts.capabilities_known
 
 
 @dataclass(frozen=True)
@@ -97,6 +122,8 @@ class Case:
     spec_ref: str = ""
     timeout_factor: float = 1.0
     """Cases that call many tools get a multiple of the per-case timeout."""
+    fresh_sessions: int = 0
+    """Fresh connections the case opens; each adds the start-up timeout to its budget."""
 
 
 @dataclass(frozen=True)
@@ -172,15 +199,16 @@ class Runner:
         return connection
 
     async def alive(self, connection: Connection, timeout: float | None = None) -> bool:
+        """Any JSON-RPC reply to a cheap tools/list, in the connection's era, means alive."""
         if not connection.running:
             return False
         self._liveness_counter += 1
         probe_id = f"mcpprobe-liveness-{self._liveness_counter}"
         probe: dict[str, Any]
-        if self._facts.era is Era.MODERN:
+        if connection.legacy_version is None and self._facts.era.speaks_modern:
             probe = modern_request(LIVENESS_METHOD, probe_id)
         else:
-            probe = {"jsonrpc": "2.0", "id": probe_id, "method": LIVENESS_METHOD}
+            probe = legacy.request(LIVENESS_METHOD, probe_id)
         try:
             reply = await connection.call(probe, timeout or self.liveness_timeout)
         except TransportError:
@@ -188,12 +216,14 @@ class Runner:
         return reply.response is not None or reply.http_status is not None
 
     async def preflight(self) -> ServerFacts:
-        """Start the server, make sure it answers, and learn its era."""
+        """Start the server, learn its era, and make sure it answers."""
         connection = await self._open()
         try:
             # Era first: on stdio, server/discover must be the first request, or a
             # dual-era server may lock into legacy semantics (stdio#backward-compatibility).
-            self._facts = await detect_era(connection, self.liveness_timeout, self.startup_timeout)
+            self._facts = await detect_era(
+                connection, self.liveness_timeout, self.startup_timeout, open_fresh=self._open
+            )
             if not await self.alive(connection):
                 detail = ""
                 stderr = getattr(getattr(connection, "stdio", None), "stderr_tail", None)
@@ -214,27 +244,21 @@ class Runner:
         self._facts = await self.preflight()
         result.facts = self._facts
         for suite, cases in plan:
-            runnable: list[Case] = []
+            runnable: list[tuple[Case, Mode]] = []
             for case in cases:
-                reason = self._skip_reason(case)
-                if reason is None and result.stopped_early:
-                    reason = "conformance failed"
-                if reason is None:
-                    runnable.append(case)
-                else:
-                    result.results.append(
-                        CaseResult(
-                            case.id,
-                            case.suite,
-                            case.severity,
-                            Status.SKIPPED,
-                            reason,
-                            spec_ref=case.spec_ref,
-                        )
-                    )
-            if not runnable:
-                continue
-            result.results.extend(await self._run_suite(suite, runnable, result))
+                expanded = self._expand(case)
+                if isinstance(expanded, str):
+                    result.results.append(self._skipped(case, expanded))
+                    continue
+                for instance, mode in expanded:
+                    if result.stopped_early:
+                        result.results.append(self._skipped(instance, "conformance failed"))
+                    else:
+                        runnable.append((instance, mode))
+            for mode in ("modern", "legacy"):
+                group = [case for case, case_mode in runnable if case_mode == mode]
+                if group:
+                    result.results.extend(await self._run_group(suite, mode, group, result))
             if suite is Suite.CONF and not self.keep_going:
                 result.stopped_early = any(
                     r.suite is Suite.CONF and r.is_finding for r in result.results
@@ -242,55 +266,91 @@ class Runner:
         result.results.sort(key=lambda r: r.case_id)
         return result
 
-    def _skip_reason(self, case: Case) -> str | None:
-        modern = self._facts.era is Era.MODERN
-        if case.era is CheckEra.MODERN and not modern:
-            return "server is not modern-era (2026-07-28); legacy checks arrive in M2"
-        if case.era in (CheckEra.LEGACY, CheckEra.DUAL):
-            return "legacy and dual-era checks arrive in M2"
-        return None
+    def _expand(self, case: Case) -> list[tuple[Case, Mode]] | str:
+        """The (case, mode) runs for this server, or why the case is skipped.
 
-    async def _run_suite(
-        self, suite: Suite, cases: Sequence[Case], run: RunResult
-    ) -> list[CaseResult]:
-        order = sorted(cases, key=lambda c: c.id)
-        rng(self.seed, "order", suite.value).shuffle(order)
-        results: list[CaseResult] = []
-        fresh = await self._open()
-        connection: Connection | None = fresh
+        A both-era case runs once per era the server speaks; its legacy run is
+        suffixed ``@legacy`` so ids stay stable when a server migrates.
+        """
+        era = self._facts.era
+        if era is Era.UNKNOWN:
+            return "server answered neither server/discover nor initialize"
+        if case.era is CheckEra.MODERN:
+            if not era.speaks_modern:
+                return f"server does not speak 2026-07-28 (detected era: {era.value})"
+            return [(case, "modern")]
+        if case.era is CheckEra.LEGACY:
+            if not era.speaks_legacy:
+                return (
+                    f"server does not speak an initialize-era revision (detected era: {era.value})"
+                )
+            return [(case, "legacy")]
+        if case.era is CheckEra.DUAL:
+            if era is not Era.DUAL:
+                return f"server is not dual-era (detected era: {era.value})"
+            return [(case, "modern")]
+        runs: list[tuple[Case, Mode]] = []
+        if era.speaks_modern:
+            runs.append((case, "modern"))
+        if era.speaks_legacy:
+            runs.append((replace(case, id=case.id + LEGACY_SUFFIX), "legacy"))
+        return runs
+
+    @staticmethod
+    def _skipped(case: Case, reason: str) -> CaseResult:
+        return CaseResult(
+            case.id, case.suite, case.severity, Status.SKIPPED, reason, spec_ref=case.spec_ref
+        )
+
+    async def _open_ready(self, mode: Mode) -> Connection | None:
+        """A started connection that has answered once, in ``mode``; None if it won't."""
+        try:
+            connection = await self._open()
+        except ServerUnavailable:
+            return None
         # A fresh process may still be starting (npx, uvx): wait for its first
         # answer here, so the start-up delay is never charged to a case.
-        if not await self.alive(fresh, self.startup_timeout):
-            await fresh.close()
-            connection = None
+        if mode == "legacy":
+            with contextlib.suppress(TransportError):
+                await legacy.open_session(connection, self.startup_timeout)
+            ready = connection.legacy_version is not None and await self.alive(connection)
+        else:
+            ready = await self.alive(connection, self.startup_timeout)
+        if ready:
+            return connection
+        await connection.close()
+        return None
+
+    async def _run_group(
+        self, suite: Suite, mode: Mode, cases: Sequence[Case], run: RunResult
+    ) -> list[CaseResult]:
+        order = sorted(cases, key=lambda c: c.id)
+        rng(self.seed, "order", suite.value, mode).shuffle(order)
+        results: list[CaseResult] = []
+        connection = await self._open_ready(mode)
+        down = "server is down" if mode == "modern" else "a legacy session could not be opened"
         try:
             for case in order:
                 if connection is None:
-                    results.append(
-                        CaseResult(
-                            case.id,
-                            case.suite,
-                            case.severity,
-                            Status.SKIPPED,
-                            "server is down",
-                            spec_ref=case.spec_ref,
-                        )
-                    )
+                    results.append(self._skipped(case, down))
                     continue
-                outcome = await self._run_case(connection, case)
+                outcome, fresh = await self._run_case(connection, case, mode)
+                saved_from = fresh[-1] if fresh else connection
                 if not await self.alive(connection):
                     reason = f": {outcome.message}" if outcome.message else ""
                     outcome = Outcome(
                         Status.CRASHED,
                         f"server stopped responding after this case ({outcome.status}{reason})",
                     )
-                    repro = self._save(case, connection)
+                    repro: str | None = self._save(case, connection)
                     await connection.close()
-                    connection = await self._restart(run)
+                    connection = await self._restart(run, mode)
                 elif outcome.status in (Status.PASSED, Status.SKIPPED):
                     repro = None
                 else:
-                    repro = self._save(case, connection)
+                    repro = self._save(case, saved_from)
+                for extra in fresh:
+                    await extra.close()
                 results.append(
                     CaseResult(
                         case.id,
@@ -307,21 +367,23 @@ class Runner:
                 await connection.close()
         return results
 
-    async def _restart(self, run: RunResult) -> Connection | None:
+    async def _restart(self, run: RunResult, mode: Mode) -> Connection | None:
         """New connection after a crash; None when the server cannot come back."""
         if run.restarts >= self.max_restarts:
             return None
         run.restarts += 1
-        try:
-            connection = await self._open()
-        except ServerUnavailable:
-            return None
-        if await self.alive(connection, self.startup_timeout):
-            return connection
-        await connection.close()
-        return None
+        return await self._open_ready(mode)
 
-    async def _run_case(self, connection: Connection, case: Case) -> Outcome:
+    async def _run_case(
+        self, connection: Connection, case: Case, mode: Mode
+    ) -> tuple[Outcome, list[Connection]]:
+        fresh: list[Connection] = []
+
+        async def open_fresh() -> Connection:
+            opened = await self._open()
+            fresh.append(opened)
+            return opened
+
         context = CaseContext(
             connection=connection,
             seed=self.seed,
@@ -330,17 +392,22 @@ class Runner:
             rng=rng(self.seed, "case", case.id),
             facts=self._facts,
             allow_destructive=self.allow_destructive,
+            mode=mode,
+            startup_timeout=self.startup_timeout,
+            open_fresh=open_fresh,
         )
-        budget = self.case_timeout * case.timeout_factor
+        budget = (
+            self.case_timeout * case.timeout_factor + self.startup_timeout * case.fresh_sessions
+        )
         try:
             async with asyncio.timeout(budget):
-                return await case.run(context)
+                return await case.run(context), fresh
         except (TimeoutError, TransportTimeout):
-            return Outcome(Status.TIMEOUT, f"no answer within {budget:g}s")
+            return Outcome(Status.TIMEOUT, f"no answer within {budget:g}s"), fresh
         except TransportClosed as exc:
-            return Outcome(Status.CRASHED, str(exc))
+            return Outcome(Status.CRASHED, str(exc)), fresh
         except Exception as exc:  # a bug in the check, reported rather than raised
-            return Outcome(Status.ERROR, f"{type(exc).__name__}: {exc}")
+            return Outcome(Status.ERROR, f"{type(exc).__name__}: {exc}"), fresh
 
     def _save(self, case: Case, connection: Connection) -> str:
         # Named by case id alone so the report stays byte-identical across runs.

@@ -18,8 +18,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from mcpprobe.protocol import legacy
 from mcpprobe.protocol.instances import UNSUPPORTED, minimal_instance
 from mcpprobe.protocol.modern import meta, request
+from mcpprobe.suites.conf.helpers import era_request
 from mcpprobe.transport.errors import TransportTimeout
 
 if TYPE_CHECKING:
@@ -96,7 +98,7 @@ async def list_tools(ctx: CaseContext, allow_destructive: bool) -> ToolInventory
     for page in range(20):
         params: JsonObject = {"cursor": cursor} if cursor else {}
         reply = await ctx.connection.call(
-            request("tools/list", f"{ctx.case_id}-list-{page}", params), ctx.timeout
+            era_request(ctx, "tools/list", f"{ctx.case_id}-list-{page}", params), ctx.timeout
         )
         result = reply.result
         if not isinstance(result, dict) or not isinstance(result.get("tools"), list):
@@ -152,12 +154,15 @@ async def call_tool(
     params: JsonObject = {"name": tool.name, "arguments": tool.arguments}
     timeout = min(TOOL_CALL_TIMEOUT, ctx.timeout)
     for round_number in range(MAX_ROUNDS + 1):
-        message = request(
-            "tools/call",
-            f"{ctx.case_id}-{tool.name}-{round_number}",
-            params,
-            request_meta=meta(capabilities=capabilities),
-        )
+        request_id = f"{ctx.case_id}-{tool.name}-{round_number}"
+        if ctx.mode == "legacy":
+            # Capabilities were fixed at initialize (none declared), and legacy
+            # servers never answer with input_required.
+            message = legacy.request("tools/call", request_id, params)
+        else:
+            message = request(
+                "tools/call", request_id, params, request_meta=meta(capabilities=capabilities)
+            )
         try:
             reply = await ctx.connection.call(message, timeout)
         except TransportTimeout:

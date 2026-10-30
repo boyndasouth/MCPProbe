@@ -1,0 +1,13 @@
+id: CONF-014
+title: Initialize-era versions listed in supportedVersions really work
+severity: warn
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/discover#discoverresult
+description: For every initialize-era revision (2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05)
+  that server/discover lists in supportedVersions, opens a fresh session and sends initialize
+  with that version. Listing a version claims support for it, and a server that supports the
+  requested version MUST answer with the same one (https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#version-negotiation).
+  Shipped as warn because the spec does not spell out that supportedVersions covers initialize-era
+  versions. Skipped when no such version is listed. Serving both eras concurrently on one
+  endpoint is only a MAY (https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning),
+  so it is not checked.

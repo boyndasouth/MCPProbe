@@ -41,7 +41,7 @@ def test_run_against_stdio_server(tmp_path: Path, stdio_argv: list[str]) -> None
     )
     assert result.exit_code == ExitCode.PASSED, result.output
     assert "seed 42" in result.output
-    assert "not modern-era" in " ".join(result.output.split())
+    assert "era: unknown" in " ".join(result.output.split())
 
 
 def test_run_unreachable_server_exits_2(tmp_path: Path) -> None:

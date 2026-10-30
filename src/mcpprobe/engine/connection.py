@@ -111,6 +111,8 @@ class StdioConnection:
         self.stdio = StdioTransport(
             spec.argv, recorder=self.recorder, env=spec.env, cwd=spec.cwd, **kwargs
         )
+        self.legacy_version: str | None = None
+        """Set once a legacy initialize handshake succeeded on this connection."""
 
     async def start(self) -> None:
         await self.stdio.start()
@@ -163,6 +165,8 @@ class HttpConnection:
         )
         self._session: str | None = None
         self._closed = False
+        self.legacy_version: str | None = None
+        """Set once a legacy initialize handshake succeeded on this connection."""
 
     async def start(self) -> None:
         """HTTP servers are not ours to start; this only resets per-connection state."""
@@ -184,9 +188,22 @@ class HttpConnection:
         masker.add_headers(self.spec.headers)
         return masker
 
+    @property
+    def session_id(self) -> str | None:
+        return self._session
+
     def conformant_headers(self, body: bytes) -> list[Header]:
+        """Headers a conformant client of this connection's era sends.
+
+        Modern: request metadata mirrored from the body. Legacy, after the
+        handshake: ``MCP-Protocol-Version`` with the negotiated version and the
+        session id, if the server assigned one.
+        """
         headers: list[Header] = [("Content-Type", "application/json"), ("Accept", ACCEPT)]
-        headers.extend(request_metadata_headers(body))
+        if self.legacy_version is None:
+            headers.extend(request_metadata_headers(body))
+        else:
+            headers.append(("MCP-Protocol-Version", self.legacy_version))
         if self._session is not None:
             headers.append((LEGACY_SESSION_HEADER, self._session))
         return headers

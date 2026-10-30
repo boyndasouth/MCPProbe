@@ -29,7 +29,7 @@ class SuiteOptions:
 
 def _conf_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
     from mcpprobe.engine.runner import Case
-    from mcpprobe.suites.conf.checks import CASES, TIMEOUT_FACTORS
+    from mcpprobe.suites.conf.checks import CASES, FRESH_SESSIONS, TIMEOUT_FACTORS
 
     checks = {check.id: check for check in catalog}
     cases: list[Case] = []
@@ -49,6 +49,7 @@ def _conf_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
                 era=check.era,
                 spec_ref=check.spec_ref,
                 timeout_factor=TIMEOUT_FACTORS.get(check_id, 1.0),
+                fresh_sessions=FRESH_SESSIONS.get(check_id, 0),
             )
         )
     return cases

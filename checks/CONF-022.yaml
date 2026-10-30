@@ -1,0 +1,8 @@
+id: CONF-022
+title: Server negotiates an outdated initialize-era revision
+severity: info
+era: legacy
+spec_ref: https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#version-negotiation
+description: 'When asked for 2025-11-25, a server SHOULD answer with the latest version it
+  supports. This notes servers whose latest is 2025-03-26 or 2024-11-05: MCPProbe only detects
+  those revisions and recommends upgrading. Info: an old revision is not a violation.'

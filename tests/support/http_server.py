@@ -55,6 +55,15 @@ class Handler(BaseHTTPRequestHandler):
         if session is not None and session not in self.sessions:
             self._send(404, b"")
             return
+        if method == "server/discover":
+            discover = {
+                "resultType": "complete",
+                "supportedVersions": ["2026-07-28"],
+                "capabilities": {},
+            }
+            reply_body = {"jsonrpc": "2.0", "id": mid, "result": discover}
+            self._send(200, json.dumps(reply_body).encode(), {"Content-Type": "application/json"})
+            return
         if method == "sleep":
             time.sleep(float(msg["params"]["seconds"]))
         if method in ("stream", "endless"):
