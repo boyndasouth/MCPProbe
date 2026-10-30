@@ -17,3 +17,7 @@ htmlcov/
 probe.json
 probe.sarif
 probe.html
+
+/everything.json
+/discover.json
+/test.json
