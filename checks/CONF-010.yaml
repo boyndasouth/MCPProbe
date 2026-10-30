@@ -1,0 +1,14 @@
+id: CONF-010
+title: input_required results are well formed and only used where allowed
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr#server-requirements-basic-workflow
+description: 'Checks that server/discover and tools/list never return input_required (only
+  prompts/get, resources/read and tools/call may). Then calls each safe tool declaring elicitation,
+  sampling and roots, answers every round with harmless inputs and retries with inputResponses
+  and the echoed requestState, up to three rounds. Every input_required result MUST carry
+  inputRequests or requestState, and every input request MUST be elicitation/create, sampling/createMessage
+  or roots/list. Servers MAY keep asking, so a round trip that never completes is not a failure.
+  Tools are called only if marked readOnlyHint: true or destructiveHint: false (all tools
+  with --allow-destructive), never if openWorldHint: true, with the minimal valid arguments
+  built from their inputSchema. Skipped when no called tool exercises the rule.'

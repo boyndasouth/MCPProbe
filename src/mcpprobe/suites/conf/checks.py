@@ -11,15 +11,19 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from jsonschema.exceptions import SchemaError
+
 from mcpprobe.engine.catalog import Transport
 from mcpprobe.engine.connection import HttpConnection, StdioConnection, encode
 from mcpprobe.engine.runner import Outcome, Status
 from mcpprobe.protocol.http_headers import request_metadata_headers
+from mcpprobe.protocol.instances import validator_for
 from mcpprobe.protocol.modern import (
     CLIENT_CAPABILITIES,
     CORE_RESULT_TYPES,
     HEADER_MISMATCH,
     INVALID_PARAMS,
+    MISSING_REQUIRED_CLIENT_CAPABILITY,
     PROTOCOL_VERSION,
     SERVER_INFO,
     UNSUPPORTED_PROTOCOL_VERSION,
@@ -35,6 +39,13 @@ from mcpprobe.suites.conf.helpers import (
     http_post,
     modern_call,
 )
+from mcpprobe.suites.conf.tools import (
+    FULL_CAPABILITIES,
+    INPUT_REQUEST_CAPABILITY,
+    ToolInventory,
+    call_tool,
+    list_tools,
+)
 from mcpprobe.transport.frames import StdioFrame
 
 if TYPE_CHECKING:
@@ -44,6 +55,7 @@ if TYPE_CHECKING:
     from mcpprobe.engine.runner import CaseContext
 
 ACCEPT = "application/json, text/event-stream"
+JsonObject = dict[str, Any]
 
 
 def _has_tools(ctx: CaseContext) -> bool:
@@ -343,6 +355,154 @@ async def conf_018(ctx: CaseContext) -> Outcome:
     return Outcome.passed()
 
 
+# ------------------------------------------------- CONF-009 / 010 / 011 (tools)
+
+ALLOWED_INPUT_METHODS = frozenset(INPUT_REQUEST_CAPABILITY)
+NON_MRTR_METHODS = ("server/discover", "tools/list")
+
+
+def _skip_note(inventory: ToolInventory) -> str:
+    if not inventory.skipped:
+        return ""
+    names = ", ".join(name for name, _ in inventory.skipped[:5])
+    more = f" and {len(inventory.skipped) - 5} more" if len(inventory.skipped) > 5 else ""
+    count = len(inventory.skipped)
+    return f"; {count} tool(s) not called for safety or lack of arguments ({names}{more})"
+
+
+async def conf_009(ctx: CaseContext) -> Outcome:
+    """Call tools declaring no client capabilities; undeclared input requests are a violation."""
+    if not _has_tools(ctx):
+        return Outcome.skipped("server does not declare the tools capability")
+    inventory = await list_tools(ctx, ctx.allow_destructive)
+    exercised = 0
+    for tool in inventory.callable:
+        exchange = await call_tool(ctx, tool, capabilities={}, follow=False)
+        reply = exchange.final
+        if reply is None:
+            continue
+        result = reply.result
+        if isinstance(result, dict) and result.get("resultType") == "input_required":
+            requests = result.get("inputRequests")
+            for key, item in requests.items() if isinstance(requests, dict) else []:
+                method = item.get("method") if isinstance(item, dict) else None
+                capability = INPUT_REQUEST_CAPABILITY.get(str(method))
+                if capability is not None:
+                    return Outcome.failed(
+                        f"tool {tool.name} sent a {method} input request ({key!r}) although the "
+                        f"client declared no {capability} capability"
+                    )
+            continue
+        error = reply.error
+        if error is not None and error.get("code") == MISSING_REQUIRED_CLIENT_CAPABILITY:
+            exercised += 1
+            data = error.get("data")
+            required = data.get("requiredCapabilities") if isinstance(data, dict) else None
+            if not isinstance(required, dict) or not required:
+                return Outcome.failed(
+                    f"tool {tool.name} returned -32021 without data.requiredCapabilities"
+                )
+            if reply.http_status is not None and reply.http_status != 400:
+                return Outcome.failed(
+                    f"tool {tool.name}: -32021 came with HTTP {reply.http_status}"
+                )
+    if not exercised:
+        return Outcome.skipped(
+            "no callable tool needed a client capability" + _skip_note(inventory)
+        )
+    return Outcome.passed()
+
+
+def _input_required_problem(result: JsonObject) -> str | None:
+    requests = result.get("inputRequests")
+    state = result.get("requestState")
+    if requests is None and state is None:
+        return "carries neither inputRequests nor requestState"
+    if state is not None and not isinstance(state, str):
+        return "has a requestState that is not a string"
+    if requests is not None:
+        if not isinstance(requests, dict):
+            return "has inputRequests that is not an object"
+        for key, item in requests.items():
+            method = item.get("method") if isinstance(item, dict) else None
+            if method not in ALLOWED_INPUT_METHODS:
+                return f"has input request {key!r} with method {method!r}, which is not allowed"
+    return None
+
+
+async def conf_010(ctx: CaseContext) -> Outcome:
+    """input_required results are well formed, and only appear where allowed."""
+    for method in NON_MRTR_METHODS:
+        if method == "tools/list" and not _has_tools(ctx):
+            continue
+        reply = await modern_call(ctx, method, f"conf-010-{method}")
+        result = reply.result
+        if isinstance(result, dict) and result.get("resultType") == "input_required":
+            return Outcome.failed(
+                f"{method} returned input_required, which only prompts/get, "
+                "resources/read and tools/call may do"
+            )
+    if not _has_tools(ctx):
+        return Outcome.skipped("server does not declare the tools capability")
+    inventory = await list_tools(ctx, ctx.allow_destructive)
+    rounds = 0
+    for tool in inventory.callable:
+        exchange = await call_tool(ctx, tool, FULL_CAPABILITIES)
+        for reply in exchange.replies:
+            result = reply.result
+            if not (isinstance(result, dict) and result.get("resultType") == "input_required"):
+                continue
+            rounds += 1
+            problem = _input_required_problem(result)
+            if problem is not None:
+                return Outcome.failed(f"tool {tool.name}: input_required result {problem}")
+    if not rounds:
+        return Outcome.skipped("no callable tool asked for input" + _skip_note(inventory))
+    return Outcome.passed()
+
+
+async def conf_011(ctx: CaseContext) -> Outcome:
+    """structuredContent is present and valid wherever a tool declares outputSchema."""
+    if not _has_tools(ctx):
+        return Outcome.skipped("server does not declare the tools capability")
+    inventory = await list_tools(ctx, ctx.allow_destructive)
+    checked = 0
+    for tool in inventory.callable:
+        schema = tool.definition.get("outputSchema")
+        if not isinstance(schema, dict):
+            continue
+        exchange = await call_tool(ctx, tool, FULL_CAPABILITIES)
+        result = exchange.final.result if exchange.final else None
+        if not isinstance(result, dict) or result.get("resultType", "complete") != "complete":
+            continue
+        if result.get("isError") is True:
+            continue  # a tool execution error carries no structured result
+        checked += 1
+        if "structuredContent" not in result:
+            return Outcome.failed(
+                f"tool {tool.name} declares outputSchema but returned no structuredContent"
+            )
+        try:
+            errors = sorted(
+                validator_for(schema).iter_errors(result["structuredContent"]),
+                key=lambda e: list(e.path),
+            )
+        except SchemaError as exc:
+            return Outcome.failed(f"tool {tool.name} has an invalid outputSchema: {exc.message}")
+        if errors:
+            first = errors[0]
+            where = "/".join(str(p) for p in first.path) or "(root)"
+            return Outcome.failed(
+                f"tool {tool.name}: structuredContent does not match outputSchema at {where}: "
+                f"{first.message}"
+            )
+    if not checked:
+        return Outcome.skipped(
+            "no callable tool with an outputSchema returned a result" + _skip_note(inventory)
+        )
+    return Outcome.passed()
+
+
 # ------------------------------------------------------------------- registry
 
 # (check id, case suffix, implementation, transports it applies to)
@@ -371,6 +531,12 @@ CASES: list[CaseSpec] = [
     ("CONF-017", "", conf_017, BOTH),
     ("CONF-018", "", conf_018, BOTH),
     ("CONF-020", "", conf_020, BOTH),
+    ("CONF-009", "", conf_009, BOTH),
+    ("CONF-010", "", conf_010, BOTH),
+    ("CONF-011", "", conf_011, BOTH),
 ]
 
-__all__ = ["CASES", "VERSION"]
+# Cases that call every safe tool get this multiple of the per-case timeout.
+TIMEOUT_FACTORS = {"CONF-009": 6.0, "CONF-010": 6.0, "CONF-011": 6.0}
+
+__all__ = ["CASES", "TIMEOUT_FACTORS", "VERSION"]

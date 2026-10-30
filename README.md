@@ -3,7 +3,7 @@
 Tells an MCP server author, in one run, whether their server is spec-compliant,
 robust to bad input, and usable by a real model.
 
-> **Status: pre-alpha (milestone M1 in progress).** 13 conformance checks for
+> **Status: pre-alpha (milestone M1 in progress).** 16 conformance checks for
 > the 2026-07-28 revision run today, with terminal and JSON reports. Legacy
 > and dual-era checks arrive in M2; servers that don't speak 2026-07-28 get
 > their modern checks skipped, never failed.

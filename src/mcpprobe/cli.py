@@ -157,7 +157,14 @@ def run(
         catalog,
         SuiteOptions(allow_destructive=allow_destructive, transport=transport),
     )
-    runner = Runner(spec, run_seed, cases_dir, case_timeout=timeout, keep_going=keep_going)
+    runner = Runner(
+        spec,
+        run_seed,
+        cases_dir,
+        case_timeout=timeout,
+        keep_going=keep_going,
+        allow_destructive=allow_destructive,
+    )
     try:
         result = asyncio.run(runner.run(plan))
     except ServerUnavailable as exc:

@@ -1,0 +1,12 @@
+id: CONF-011
+title: structuredContent matches the tool's outputSchema
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#output-schema
+description: 'Calls each safe tool that declares an outputSchema. When a call completes without
+  isError, servers MUST provide structured results that conform to the schema, so structuredContent
+  must be present and validate against it (JSON Schema 2020-12 unless $schema says otherwise;
+  remote $ref is never fetched). Tools are called only if marked readOnlyHint: true or destructiveHint:
+  false (all tools with --allow-destructive), never if openWorldHint: true, with the minimal
+  valid arguments built from their inputSchema. Skipped when no called tool exercises the
+  rule.'

@@ -173,3 +173,22 @@ async def test_dual_era_server_is_not_pushed_into_legacy_mode(tmp_path: Path) ->
     assert result.facts is not None
     assert result.facts.era is Era.MODERN
     assert [r.status for r in result.results] == [Status.PASSED]
+
+
+async def test_destructive_tools_are_never_called_by_default(tmp_path: Path) -> None:
+    spec = stdio_spec()
+    result = await run_checks(spec, Transport.STDIO, tmp_path)
+    assert result.restarts == 0
+    assert all(r.status is not Status.CRASHED for r in result.results)
+
+
+async def test_allow_destructive_does_call_them(tmp_path: Path) -> None:
+    # Proves the trap above is real: with the flag, delete_everything runs and
+    # takes the server down, which the runner reports as a crash.
+    catalog = load_catalog()
+    plan = collect([Suite.CONF], catalog, SuiteOptions(transport=Transport.STDIO))
+    plan = [(s, [c for c in cases if c.id == "CONF-010"]) for s, cases in plan]
+    runner = Runner(stdio_spec(), 42, tmp_path / "cases", case_timeout=5, allow_destructive=True)
+    result = await runner.run(plan)
+    assert result.restarts == 1
+    assert result.results[0].status is Status.CRASHED

@@ -82,6 +82,7 @@ class CaseContext:
     timeout: float
     rng: random.Random = field(repr=False)
     facts: ServerFacts = field(default_factory=lambda: ServerFacts(Era.MODERN))
+    allow_destructive: bool = False
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,8 @@ class Case:
     title: str = ""
     era: CheckEra = CheckEra.BOTH
     spec_ref: str = ""
+    timeout_factor: float = 1.0
+    """Cases that call many tools get a multiple of the per-case timeout."""
 
 
 @dataclass(frozen=True)
@@ -152,6 +155,7 @@ class Runner:
     liveness_timeout: float = 5.0
     keep_going: bool = False
     max_restarts: int = 20
+    allow_destructive: bool = False
     connect: Callable[[ServerSpec], Connection] = field(default=connect)
     _liveness_counter: int = field(default=0, init=False)
     _facts: ServerFacts = field(default_factory=lambda: ServerFacts(Era.MODERN), init=False)
@@ -318,12 +322,14 @@ class Runner:
             timeout=self.case_timeout,
             rng=rng(self.seed, "case", case.id),
             facts=self._facts,
+            allow_destructive=self.allow_destructive,
         )
+        budget = self.case_timeout * case.timeout_factor
         try:
-            async with asyncio.timeout(self.case_timeout):
+            async with asyncio.timeout(budget):
                 return await case.run(context)
         except (TimeoutError, TransportTimeout):
-            return Outcome(Status.TIMEOUT, f"no answer within {self.case_timeout:g}s")
+            return Outcome(Status.TIMEOUT, f"no answer within {budget:g}s")
         except TransportClosed as exc:
             return Outcome(Status.CRASHED, str(exc))
         except Exception as exc:  # a bug in the check, reported rather than raised

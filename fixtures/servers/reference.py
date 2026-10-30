@@ -42,6 +42,9 @@ BREAKS = {
     "CONF-017": "results carry no serverInfo",
     "CONF-018": "cacheable results carry no ttlMs/cacheScope",
     "CONF-020": "the first protocol version seen is reused for every later request",
+    "CONF-009": "ask_name sends an elicitation input request the client never declared",
+    "CONF-010": "ask_name's input_required result has neither inputRequests nor requestState",
+    "CONF-011": "weather returns structuredContent that does not match its outputSchema",
 }
 
 TOOLS = [
@@ -60,6 +63,35 @@ TOOLS = [
         "description": "Returns a fixed time, for deterministic tests",
         "inputSchema": {"type": "object", "additionalProperties": False},
         "annotations": {"readOnlyHint": True},
+    },
+    {
+        "name": "ask_name",
+        "description": "Asks the user for their name through elicitation, then greets them",
+        "inputSchema": {"type": "object"},
+        "annotations": {"readOnlyHint": False, "destructiveHint": False},
+    },
+    {
+        "name": "weather",
+        "description": "Returns fixed weather data as structured content",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"city": {"type": "string", "enum": ["Austin", "Oslo"]}},
+            "required": ["city"],
+        },
+        "outputSchema": {
+            "type": "object",
+            "properties": {"city": {"type": "string"}, "celsius": {"type": "number"}},
+            "required": ["city", "celsius"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True},
+    },
+    {
+        # Trap: MCPProbe must never call this without --allow-destructive.
+        "name": "delete_everything",
+        "description": "Destructive. Calling it shuts the server down.",
+        "inputSchema": {"type": "object"},
+        "annotations": {"destructiveHint": True},
     },
 ]
 
@@ -134,8 +166,60 @@ class Server:
                 return self._result({"content": [{"type": "text", "text": text}]})
             if name == "get_time":
                 return self._result({"content": [{"type": "text", "text": "12:00"}]})
+            if name == "ask_name":
+                return self._ask_name(params)
+            if name == "weather":
+                city = str(arguments.get("city", "Austin"))
+                data: dict[str, Any] = {"city": city, "celsius": 21.5}
+                if "CONF-011" in self.breaks:
+                    data["celsius"] = "warm"
+                text = json.dumps(data)
+                return self._result(
+                    {"content": [{"type": "text", "text": text}], "structuredContent": data}
+                )
+            if name == "delete_everything":
+                sys.stderr.write("delete_everything was called\n")
+                sys.stderr.flush()
+                raise SystemExit(99)
             raise Rpc(-32602, f"Unknown tool: {name}")
         raise Rpc(-32601, "Method not found", status=404)
+
+    def _ask_name(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Multi round-trip request (mrtr#basic-workflow)."""
+        answers = params.get("inputResponses")
+        answer = answers.get("name") if isinstance(answers, dict) else None
+        if isinstance(answer, dict) and answer.get("action") == "accept":
+            content = answer.get("content") or {}
+            text = f"Hello, {content.get('name', 'friend')}"
+            return self._result({"content": [{"type": "text", "text": text}]})
+        meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
+        caps = meta.get(CAPS) if isinstance(meta.get(CAPS), dict) else {}
+        if "elicitation" not in caps and "CONF-009" not in self.breaks:
+            raise Rpc(
+                -32021,
+                "Missing required client capability: elicitation",
+                {"requiredCapabilities": {"elicitation": {}}},
+            )
+        if "CONF-010" in self.breaks:
+            return {"resultType": "input_required"}
+        return {
+            "resultType": "input_required",
+            "inputRequests": {
+                "name": {
+                    "method": "elicitation/create",
+                    "params": {
+                        "mode": "form",
+                        "message": "What is your name?",
+                        "requestedSchema": {
+                            "type": "object",
+                            "properties": {"name": {"type": "string"}},
+                            "required": ["name"],
+                        },
+                    },
+                }
+            },
+            "requestState": "ask_name:v1",
+        }
 
     # ------------------------------------------------------------ messages
 

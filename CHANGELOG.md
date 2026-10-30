@@ -25,6 +25,10 @@ All notable changes to this project are documented here. The format follows
 - `mcpprobe run` executes the runner and prints a terminal summary.
 - First conformance checks for 2026-07-28: CONF-001 to 007, 012, 015 to 018
   and 020, each tested against a passing and a failing fixture.
+- CONF-009 (undeclared client capabilities), CONF-010 (multi round-trip
+  requests) and CONF-011 (structuredContent vs outputSchema). They call only
+  tools marked read-only or non-destructive, never open-world ones, with
+  minimal valid arguments built from each inputSchema.
 - Reference fixture server (`fixtures/servers/reference.py`, stdio and HTTP)
   with `--break <ID>` to violate one check at a time.
 - Era probe: `server/discover` is sent first, and modern checks are skipped

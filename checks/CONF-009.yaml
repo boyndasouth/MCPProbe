@@ -1,0 +1,13 @@
+id: CONF-009
+title: Undeclared client capabilities are never relied on
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta
+description: 'Calls each safe tool while declaring no client capabilities. A server MUST NOT
+  send an input request (elicitation/create, sampling/createMessage, roots/list) the client
+  has not declared (basic/patterns/mrtr#server-requirements-basic-workflow); when a request
+  needs an undeclared capability it MUST return MissingRequiredClientCapabilityError (-32021)
+  whose data.requiredCapabilities lists it, with HTTP 400. Tools are called only if marked
+  readOnlyHint: true or destructiveHint: false (all tools with --allow-destructive), never
+  if openWorldHint: true, with the minimal valid arguments built from their inputSchema. Skipped
+  when no called tool exercises the rule.'
