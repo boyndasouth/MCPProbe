@@ -1,0 +1,23 @@
+id: FUZZ-001
+title: Fuzzed tool arguments never crash the server or go unanswered
+severity: error
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages
+description: 'Calls each tool with arguments generated from its inputSchema: valid values,
+  and near-misses (a required field dropped, a wrong type, a value just past a bound, an
+  extra property, null, deep nesting, a 100,000-character string, or odd Unicode such as a
+  lone surrogate). All messages MUST follow JSON-RPC 2.0, which requires a response to every
+  request, and servers MUST validate all tool inputs
+  (https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations),
+  so no input may crash the server or leave its request unanswered. Fails on a crash, on a
+  request dropped while the server keeps answering others, and (as a timeout) on a server
+  that stops answering altogether. Each call carries a progressToken, and progress
+  notifications keep a slow call alive up to three times --timeout
+  (https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation#timeouts).
+  A crash is shrunk to a minimal input (on stdio by restarting the server) and saved for
+  mcpprobe replay; unanswered requests are not shrunk, since every attempt costs a full
+  timeout. Runs --examples argument sets per tool (default 50) from the run seed. Tools are
+  called only if marked readOnlyHint: true or destructiveHint: false (all tools with
+  --allow-destructive), and never if openWorldHint: true unless --allow-open-world is
+  passed. Generated URLs, emails and hostnames use the reserved .invalid TLD. Runs once per
+  server, in the modern era if the server speaks it.'

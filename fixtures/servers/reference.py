@@ -54,6 +54,10 @@ BREAKS = {
     "CONF-014": "server/discover lists 2024-11-05, which initialize does not support",
     "CONF-021": "initialize answers an unsupported version with an error",
     "CONF-022": "only the outdated 2025-03-26 revision is offered",
+    "FUZZ-001": "echo crashes on a message with a non-ASCII character",
+    "FUZZ-002": "invalid tool arguments get -32603 Internal error",
+    "FUZZ-003": "echo accepts a message of any type",
+    "FUZZ-004": "echo rejects an empty message with -32602, although its schema allows it",
 }
 ERAS = ("modern", "legacy", "dual")
 
@@ -104,6 +108,10 @@ TOOLS = [
         "annotations": {"destructiveHint": True},
     },
 ]
+
+
+class Crash(Exception):
+    """Simulated crash: stdio exits; HTTP drops the request without an answer."""
 
 
 class Rpc(Exception):
@@ -198,8 +206,23 @@ class Server:
             return self._result({"tools": tools}, cacheable=True, legacy=legacy)
         if method == "tools/call":
             name = params.get("name")
-            arguments = params.get("arguments") or {}
+            arguments = params.get("arguments", {})
+            tool = next((t for t in TOOLS if t["name"] == name), None)
+            problem = None if tool is None else self._invalid(tool, arguments)
+            if problem is not None:
+                if "FUZZ-002" in self.breaks:
+                    raise Rpc(-32603, "Internal error", status=500)
+                # tools#error-handling: input validation errors are tool execution errors.
+                text = f"Invalid arguments for {name}: {problem}"
+                return self._result(
+                    {"content": [{"type": "text", "text": text}], "isError": True}, legacy=legacy
+                )
             if name == "echo":
+                message = arguments.get("message", "")
+                if "FUZZ-001" in self.breaks and isinstance(message, str) and not message.isascii():
+                    raise Crash
+                if "FUZZ-004" in self.breaks and message == "":
+                    raise Rpc(-32602, "message must not be empty")
                 text = str(arguments.get("message", ""))
                 return self._result({"content": [{"type": "text", "text": text}]}, legacy=legacy)
             if name == "get_time":
@@ -231,6 +254,28 @@ class Server:
         raise Rpc(-32601, "Method not found", status=200 if legacy else 404)
 
     # ------------------------------------------------------------ legacy era
+
+    def _invalid(self, tool: dict[str, Any], arguments: Any) -> str | None:
+        """Why ``arguments`` fail the tool's inputSchema (the subset these tools use)."""
+        if not isinstance(arguments, dict):
+            return "arguments must be an object"
+        schema = tool["inputSchema"]
+        properties = schema.get("properties", {})
+        for name in schema.get("required", []):
+            if name not in arguments:
+                return f"missing required property {name!r}"
+        if schema.get("additionalProperties") is False:
+            extra = sorted(set(arguments) - set(properties))
+            if extra:
+                return f"unexpected property {extra[0]!r}"
+        lax = tool["name"] == "echo" and "FUZZ-003" in self.breaks
+        for name, value in arguments.items():
+            rule = properties.get(name, {})
+            if rule.get("type") == "string" and not isinstance(value, str) and not lax:
+                return f"{name!r} must be a string"
+            if "enum" in rule and value not in rule["enum"]:
+                return f"{name!r} must be one of {rule['enum']}"
+        return None
 
     def _initialize(self, params: dict[str, Any]) -> tuple[dict[str, Any], str]:
         """2025-11-25 lifecycle: answer with the requested version if supported,
@@ -371,7 +416,11 @@ def _error(mid: Any, exc: Rpc) -> dict[str, Any]:
 
 
 def _dump(obj: dict[str, Any]) -> bytes:
-    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    text = json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+    try:
+        return text.encode("utf-8")
+    except UnicodeEncodeError:  # a lone surrogate, echoed back: send it escaped
+        return json.dumps(obj, separators=(",", ":")).encode("ascii")
 
 
 # ------------------------------------------------------------------ stdio
@@ -385,7 +434,10 @@ def serve_stdio(server: Server) -> None:
     for raw in sys.stdin.buffer:
         if not raw.strip():
             continue
-        _, response, _ = server.handle(raw)
+        try:
+            _, response, _ = server.handle(raw)
+        except Crash:
+            sys.exit(98)
         if response is not None:
             out.write(_dump(response) + b"\n")
             out.flush()
@@ -446,6 +498,9 @@ def _header_mismatch(server: Server, headers: Any, raw: bytes) -> str | None:
 def make_http_server(server: Server, port: int = 0) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+        # Buffer each response so headers and body leave in one write; unbuffered,
+        # Nagle's algorithm and delayed ACKs add ~40 ms to every keep-alive request.
+        wbufsize = 64 * 1024
 
         def log_message(self, format: str, *args: Any) -> None:
             pass
@@ -494,7 +549,11 @@ def make_http_server(server: Server, port: int = 0) -> ThreadingHTTPServer:
                 error = Rpc(-32600, f"Unsupported MCP-Protocol-Version: {version}")
                 self._send(400, _error(None, error))
                 return
-            status, response, new_session = server.handle(raw, session, http=True)
+            try:
+                status, response, new_session = server.handle(raw, session, http=True)
+            except Crash:
+                self.close_connection = True  # drop the request: no status line, no body
+                return
             self._send(status, response, new_session)
 
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)

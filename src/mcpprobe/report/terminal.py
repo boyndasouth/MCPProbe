@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from rich.markup import escape
+
 from mcpprobe.engine.catalog import Severity
 from mcpprobe.engine.runner import Status
 from mcpprobe.protocol.era import Era, ServerFacts
@@ -58,9 +60,9 @@ def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
         label = item.status.value
         if item.status is Status.FAILED and item.severity is Severity.INFO:
             style, label = "cyan", "note"  # advice: never fails a run
-        line = f"[{style}]{label:>8}[/] {item.case_id} ({item.severity.value})"
+        line = f"[{style}]{label:>8}[/] {escape(item.case_id)} ({item.severity.value})"
         if item.message:
-            line += f": {item.message}"
+            line += f": {escape(item.message)}"
         console.print(line, highlight=False)
         if item.repro:
             console.print(
@@ -69,7 +71,7 @@ def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
                 highlight=False,
             )
     for reason, count in sorted(skipped.items()):
-        console.print(f"[dim] skipped {count} case(s): {reason}[/]", highlight=False)
+        console.print(f"[dim] skipped {count} case(s): {escape(reason)}[/]", highlight=False)
     notes = sum(
         1 for r in result.results if r.status is Status.FAILED and r.severity is Severity.INFO
     )

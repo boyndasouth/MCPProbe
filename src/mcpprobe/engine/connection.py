@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from mcpprobe.transport.frames import Header, Recording, Target
+    from mcpprobe.transport.sse import SseEvent
 
 ACCEPT = "application/json, text/event-stream"
 LEGACY_SESSION_HEADER = "Mcp-Session-Id"
@@ -77,11 +78,20 @@ class Reply:
         return error if isinstance(error, dict) else None
 
 
+PROGRESS = "notifications/progress"
+
+
 def encode(message: JsonObject | bytes) -> bytes:
     """Compact, key-order-preserving JSON. Bytes pass through untouched."""
     if isinstance(message, bytes):
         return message
-    return json.dumps(message, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    text = json.dumps(message, separators=(",", ":"), ensure_ascii=False)
+    try:
+        return text.encode("utf-8")
+    except UnicodeEncodeError:
+        # A lone surrogate (fuzzed "odd Unicode") has no UTF-8 form; JSON can
+        # still carry it as a \ud800 escape, which is what we want to send.
+        return json.dumps(message, separators=(",", ":"), ensure_ascii=True).encode("ascii")
 
 
 def _parse(data: bytes | str) -> Any:
@@ -89,6 +99,22 @@ def _parse(data: bytes | str) -> Any:
         return json.loads(data)
     except (UnicodeDecodeError, json.JSONDecodeError):
         return None
+
+
+def _progress_token(message: JsonObject | bytes) -> Any:
+    if isinstance(message, bytes):
+        return None
+    params = message.get("params")
+    request_meta = params.get("_meta") if isinstance(params, dict) else None
+    return request_meta.get("progressToken") if isinstance(request_meta, dict) else None
+
+
+def _is_progress_for(token: Any, item: Any) -> bool:
+    """Whether ``item`` is a progress notification for ``token`` (never for no token)."""
+    if token is None or not isinstance(item, dict) or item.get("method") != PROGRESS:
+        return False
+    params = item.get("params")
+    return isinstance(params, dict) and params.get("progressToken") == token
 
 
 def _message_id(message: JsonObject | bytes) -> tuple[bool, Any]:
@@ -132,26 +158,47 @@ class StdioConnection:
     def masker(self) -> Masker:
         return Masker(self.spec.env.values())
 
-    async def call(self, message: JsonObject | bytes, timeout: float) -> Reply:
+    async def call(
+        self, message: JsonObject | bytes, timeout: float, *, max_timeout: float | None = None
+    ) -> Reply:
+        """Send ``message``; for a request, wait for the response with its id.
+
+        With ``max_timeout``, each progress notification for the request's
+        ``progressToken`` restarts the timeout, up to ``max_timeout`` in total
+        (basic/patterns/cancellation#timeouts).
+        """
         await self.stdio.send_line(encode(message))
         is_request, wanted = _message_id(message)
         if not is_request:
             return Reply(response=None)
+        token = _progress_token(message) if max_timeout is not None else None
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + timeout
+        started = loop.time()
+        limit = started + max(timeout, max_timeout or 0)
+        deadline = started + timeout
         notifications: list[JsonObject] = []
         other: list[bytes] = []
+        progress = 0
         while True:
             remaining = deadline - loop.time()
-            if remaining <= 0:
-                raise TransportTimeout(f"no response with id {wanted!r} within {timeout:g}s")
-            line = await self.stdio.receive(remaining)
+            try:
+                if remaining <= 0:
+                    raise TransportTimeout("deadline passed")
+                line = await self.stdio.receive(remaining)
+            except TransportTimeout as exc:
+                raise TransportTimeout(
+                    f"no response with id {wanted!r} within {loop.time() - started:.0f}s",
+                    progress=progress,
+                ) from exc
             parsed = _parse(line)
             is_response = isinstance(parsed, dict) and "method" not in parsed and "id" in parsed
             if is_response and parsed["id"] == wanted:
                 return Reply(parsed, tuple(notifications), tuple(other))
             if isinstance(parsed, dict) and "method" in parsed and "id" not in parsed:
                 notifications.append(parsed)
+                if _is_progress_for(token, parsed):
+                    progress += 1
+                    deadline = min(loop.time() + timeout, limit)
             else:
                 other.append(line)
 
@@ -208,11 +255,32 @@ class HttpConnection:
             headers.append((LEGACY_SESSION_HEADER, self._session))
         return headers
 
-    async def call(self, message: JsonObject | bytes, timeout: float) -> Reply:
+    async def call(
+        self, message: JsonObject | bytes, timeout: float, *, max_timeout: float | None = None
+    ) -> Reply:
+        """POST ``message``; see ``StdioConnection.call`` for ``max_timeout``."""
         body = encode(message)
-        exchange = await self.http.request(
-            "POST", body, self.conformant_headers(body), timeout=timeout
-        )
+        token = _progress_token(message) if max_timeout is not None else None
+        progress = 0
+
+        def is_progress(event: SseEvent) -> bool:
+            nonlocal progress
+            if _is_progress_for(token, _parse(event.data)):
+                progress += 1
+                return True
+            return False
+
+        try:
+            exchange = await self.http.request(
+                "POST",
+                body,
+                self.conformant_headers(body),
+                timeout=timeout,
+                extend=None if token is None else is_progress,
+                max_timeout=max_timeout,
+            )
+        except TransportTimeout as exc:
+            raise TransportTimeout(str(exc), progress=progress) from exc
         self._session = exchange.header(LEGACY_SESSION_HEADER) or self._session
         _, wanted = _message_id(message)
         candidates: Sequence[bytes | str]

@@ -1,0 +1,13 @@
+id: FUZZ-002
+title: Invalid tool arguments are rejected cleanly, not with an internal error
+severity: error
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling
+description: 'Judged from the FUZZ-001 traffic. Arguments that fail the tool''s own inputSchema
+  are input validation errors, which the spec reports as tool execution errors (isError:
+  true), and servers MUST validate all tool inputs
+  (https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations).
+  Passes on isError: true, -32602 (Invalid params) or any other specific error. Fails on
+  -32603 (Internal error), which means the input reached code that did not expect it, or on
+  a reply that is not a JSON-RPC response at all (for example an HTML error page). The
+  failing input is shrunk and saved for mcpprobe replay.'

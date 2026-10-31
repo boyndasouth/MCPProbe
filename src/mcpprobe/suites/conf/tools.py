@@ -5,8 +5,9 @@ Safety rules (spec: "Destructive tools are skipped unless --allow-destructive"):
 - MCP's annotation defaults treat a tool as destructive unless it says
   otherwise, so a tool is called only if it is ``readOnlyHint: true`` or
   explicitly ``destructiveHint: false`` (or ``--allow-destructive`` is set).
-- Tools explicitly marked ``openWorldHint: true`` are never called: they
-  reach outside the server.
+- Tools explicitly marked ``openWorldHint: true`` are not called unless
+  ``--allow-open-world`` is set: they reach outside the server, and MCPProbe
+  never sends traffic to hosts the user did not name.
 - Arguments are the minimal valid instance of the ``inputSchema``; tools
   whose arguments cannot be built are skipped, not guessed at.
 
@@ -25,6 +26,8 @@ from mcpprobe.suites.conf.helpers import era_request
 from mcpprobe.transport.errors import TransportTimeout
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from mcpprobe.engine.connection import Reply
     from mcpprobe.engine.runner import CaseContext
 
@@ -79,11 +82,14 @@ class Exchange:
         return self.replies[-1] if self.replies else None
 
 
-def _is_safe(tool: JsonObject, allow_destructive: bool) -> str | None:
+def unsafe_reason(
+    tool: Mapping[str, Any], *, allow_destructive: bool, allow_open_world: bool
+) -> str | None:
+    """Why calling ``tool`` is not allowed under the safety rules, or None."""
     annotations = tool.get("annotations")
     annotations = annotations if isinstance(annotations, dict) else {}
-    if annotations.get("openWorldHint") is True:
-        return "reaches outside the server (openWorldHint)"
+    if annotations.get("openWorldHint") is True and not allow_open_world:
+        return "reaches outside the server (openWorldHint; pass --allow-open-world to include it)"
     if allow_destructive:
         return None
     if annotations.get("readOnlyHint") is True or annotations.get("destructiveHint") is False:
@@ -114,7 +120,9 @@ async def list_tools(ctx: CaseContext, allow_destructive: bool) -> ToolInventory
         name = tool.get("name")
         if not isinstance(name, str):
             continue
-        reason = _is_safe(tool, allow_destructive)
+        reason = unsafe_reason(
+            tool, allow_destructive=allow_destructive, allow_open_world=ctx.allow_open_world
+        )
         if reason is None:
             arguments = minimal_instance(tool.get("inputSchema", {"type": "object"}))
             if arguments is UNSUPPORTED or not isinstance(arguments, dict):

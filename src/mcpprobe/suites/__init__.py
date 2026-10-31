@@ -55,6 +55,46 @@ def _conf_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
     return cases
 
 
+def _fuzz_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
+    from mcpprobe.engine.runner import Case, RelatedCheck
+    from mcpprobe.suites.fuzz.checks import (
+        FRESH_SESSIONS,
+        PRIMARY,
+        RELATED,
+        TIMEOUT_FACTOR,
+        fuzz_tool,
+    )
+
+    checks = {check.id: check for check in catalog}
+    primary = checks.get(PRIMARY)
+    if primary is None or options.transport not in primary.transports:
+        return []
+    related = tuple(
+        RelatedCheck(check.id, check.severity, check.spec_ref)
+        for check in (checks.get(check_id) for check_id in RELATED)
+        if check is not None
+    )
+    return [
+        Case(
+            id=PRIMARY,
+            suite=Suite.FUZZ,
+            severity=primary.severity,
+            run=fuzz_tool,
+            title=primary.title,
+            era=primary.era,
+            spec_ref=primary.spec_ref,
+            timeout_factor=TIMEOUT_FACTOR,
+            fresh_sessions=FRESH_SESSIONS,
+            per_tool=True,
+            once=True,
+            related=related,
+        )
+    ]
+
+
+_BUILDERS = {Suite.CONF: _conf_cases, Suite.FUZZ: _fuzz_cases}
+
+
 def collect(
     suites: Sequence[Suite], catalog: Sequence[Check], options: SuiteOptions
 ) -> list[tuple[Suite, list[Case]]]:
@@ -63,6 +103,6 @@ def collect(
     for suite in SUITE_ORDER:
         if suite not in suites:
             continue
-        cases = _conf_cases(catalog, options) if suite is Suite.CONF else []
-        plan.append((suite, cases))
+        builder = _BUILDERS.get(suite)
+        plan.append((suite, builder(catalog, options) if builder else []))
     return plan

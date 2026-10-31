@@ -8,6 +8,33 @@ versioned and never silently reused.
 
 ## [Unreleased]
 
+Milestone M3, part 1: the FUZZ suite.
+
+### Added
+- FUZZ suite: each tool is called `--examples` times (default 50) with
+  arguments generated from its `inputSchema` by Hypothesis, both valid and
+  near-miss (missing required field, wrong type, value past a bound, extra
+  property, null, deep nesting, huge string, odd Unicode). Validity is decided
+  by the tool's own schema, in its own dialect.
+- FUZZ-001 (error): no input crashes the server or goes unanswered. FUZZ-002
+  (error): invalid input is not answered with -32603 or a non-JSON-RPC reply.
+  FUZZ-003 (warn): invalid input is not accepted as a success. FUZZ-004
+  (warn): schema-valid input is not rejected with -32602.
+- Every FUZZ finding is shrunk to a minimal input and saved as a one-call
+  recording on a fresh server for `mcpprobe replay`; stdio crashes are shrunk
+  by restarting the server between attempts.
+- `--examples N` and `--allow-open-world`. Open-world tools are still never
+  called by default.
+- Requests can carry a `progressToken`: progress notifications keep a slow
+  call alive up to three times the timeout, on stdio and Streamable HTTP.
+- A request the server never answers, while it keeps answering others, is
+  reported as dropped rather than as a hang.
+
+### Changed
+- The terminal report no longer swallows text in square brackets in messages.
+- Messages that contain a lone surrogate are sent with it escaped (`\ud800`)
+  instead of failing to encode.
+
 ## [0.2.0] - 2026-10-30
 
 Milestone M2: legacy and dual-era servers. Era detection verified against 10

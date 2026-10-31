@@ -12,6 +12,11 @@ class ServerStartError(TransportError):
 class TransportTimeout(TransportError):
     """Nothing arrived within the allowed time."""
 
+    def __init__(self, message: str, *, progress: int = 0) -> None:
+        super().__init__(message)
+        self.progress = progress
+        """Progress notifications seen for the request before it timed out."""
+
 
 class TransportClosed(TransportError):
     """The server closed its output, exited, or the connection dropped."""

@@ -7,9 +7,7 @@ former and fail the latter on every transport it applies to.
 
 from __future__ import annotations
 
-import importlib.util
 import sys
-import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -24,42 +22,11 @@ from mcpprobe.protocol.era import Era
 from mcpprobe.report.json_report import dumps
 from mcpprobe.suites import SuiteOptions, collect
 from mcpprobe.suites.conf.checks import CASES
+from tests.support.reference import reference, stdio_spec
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     from mcpprobe.engine.connection import ServerSpec
     from mcpprobe.engine.runner import RunResult
-
-REFERENCE = Path(__file__).parents[1] / "fixtures" / "servers" / "reference.py"
-
-
-def _load_reference() -> Any:
-    spec = importlib.util.spec_from_file_location("mcpprobe_reference_fixture", REFERENCE)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-reference = _load_reference()
-
-
-class HttpFixture:
-    def __init__(self, breaks: set[str], era: str = "modern") -> None:
-        self.httpd = reference.make_http_server(reference.Server(breaks, era))
-        self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}/mcp"
-        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-
-    def close(self) -> None:
-        self.httpd.shutdown()
-        self.httpd.server_close()
-
-
-def stdio_spec(breaks: tuple[str, ...] = (), era: str = "modern") -> StdioServer:
-    flags = [arg for check in breaks for arg in ("--break", check)]
-    return StdioServer((sys.executable, "-u", str(REFERENCE), "--era", era, *flags))
 
 
 async def run_checks(
@@ -71,20 +38,6 @@ async def run_checks(
         plan = [(suite, [c for c in cases if c.id.split("/")[0] == only]) for suite, cases in plan]
     runner = Runner(spec, 42, tmp_path / "cases", case_timeout=5, liveness_timeout=5)
     return await runner.run(plan)
-
-
-@pytest.fixture
-def http_fixture() -> Iterator[Any]:
-    fixtures: list[HttpFixture] = []
-
-    def start(breaks: set[str] | None = None, era: str = "modern") -> HttpFixture:
-        fixture = HttpFixture(breaks or set(), era)
-        fixtures.append(fixture)
-        return fixture
-
-    yield start
-    for fixture in fixtures:
-        fixture.close()
 
 
 def _fixture_eras(check: CatalogEra) -> tuple[str, ...]:

@@ -23,7 +23,7 @@ from mcpprobe.transport.errors import TransportClosed, TransportTimeout
 from mcpprobe.transport.sse import SseEvent, SseParser
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from types import TracebackType
 
     from mcpprobe.transport.frames import Header
@@ -105,8 +105,14 @@ class HttpTransport:
         url: str | None = None,
         stop_after_events: int | None = None,
         timeout: float | None = None,
+        extend: Callable[[SseEvent], bool] | None = None,
+        max_timeout: float | None = None,
     ) -> HttpExchange:
-        """Send one HTTP request and read the whole response (or up to a stop)."""
+        """Send one HTTP request and read the whole response (or up to a stop).
+
+        With ``extend``, every SSE event it accepts (a progress notification)
+        restarts the timeout, up to ``max_timeout`` in total.
+        """
         target = url or self.url
         all_headers = (*self._headers, *headers)
         exchange = self._recorder.new_exchange()
@@ -116,8 +122,12 @@ class HttpTransport:
         chunks: list[bytes] = []
         events: list[SseEvent] = []
         complete = True
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        window = timeout or self._timeout
+        limit = started + max(window, max_timeout or 0)
         try:
-            async with asyncio.timeout(timeout or self._timeout):
+            async with asyncio.timeout(window) as deadline:
                 request = self._client.build_request(
                     method, target, content=body or None, headers=list(all_headers)
                 )
@@ -130,7 +140,10 @@ class HttpTransport:
                         chunks.append(chunk)
                         size += len(chunk)
                         if parser is not None:
-                            events.extend(parser.feed(chunk))
+                            fresh = parser.feed(chunk)
+                            events.extend(fresh)
+                            if extend is not None and any(extend(e) for e in fresh):
+                                deadline.reschedule(min(loop.time() + window, limit))
                             if stop_after_events is not None and len(events) >= stop_after_events:
                                 complete = False
                                 break

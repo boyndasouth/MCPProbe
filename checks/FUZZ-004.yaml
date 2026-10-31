@@ -1,0 +1,11 @@
+id: FUZZ-004
+title: Schema-valid tool arguments are not rejected as invalid params
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool
+description: 'Judged from the FUZZ-001 traffic. A tool''s inputSchema is the JSON Schema
+  defining its expected parameters, so arguments that validate against it should not be
+  answered with -32602 (Invalid params): when they are, the schema promises more than the
+  tool accepts, and a model that follows the schema will fail. Business-logic failures
+  (isError: true) and server errors are not flagged. The failing input is shrunk and saved
+  for mcpprobe replay.'

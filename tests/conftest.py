@@ -7,9 +7,11 @@ from typing import TYPE_CHECKING
 import pytest
 
 from tests.support.http_server import serve
+from tests.support.reference import HttpFixture
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from typing import Any
 
 SUPPORT = Path(__file__).parent / "support"
 
@@ -31,3 +33,17 @@ def http_url() -> Iterator[str]:
     yield url
     server.shutdown()
     server.server_close()
+
+
+@pytest.fixture
+def http_fixture() -> Iterator[Any]:
+    fixtures: list[HttpFixture] = []
+
+    def start(breaks: set[str] | None = None, era: str = "modern") -> HttpFixture:
+        fixture = HttpFixture(breaks or set(), era)
+        fixtures.append(fixture)
+        return fixture
+
+    yield start
+    for fixture in fixtures:
+        fixture.close()

@@ -98,8 +98,16 @@ def run(
         bool, typer.Option(help="Run later suites even if conformance fails.")
     ] = False,
     allow_destructive: Annotated[
-        bool, typer.Option(help="Fuzz tools marked destructiveHint: true.")
+        bool,
+        typer.Option(help="Also call tools not marked readOnlyHint or destructiveHint: false."),
     ] = False,
+    allow_open_world: Annotated[
+        bool,
+        typer.Option(help="Also call tools marked openWorldHint: true (they reach other hosts)."),
+    ] = False,
+    examples: Annotated[
+        int, typer.Option(min=1, max=10_000, help="Generated argument sets per tool (FUZZ).")
+    ] = 50,
     baseline: Annotated[
         Path | None, typer.Option(help="Previous JSON report; fail only on new findings.")
     ] = None,
@@ -170,6 +178,8 @@ def run(
         case_timeout=timeout,
         keep_going=keep_going,
         allow_destructive=allow_destructive,
+        allow_open_world=allow_open_world,
+        fuzz_examples=examples,
         startup_timeout=startup_timeout,
     )
     try:

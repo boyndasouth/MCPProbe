@@ -48,11 +48,14 @@ Useful options for `run`:
 
 | Option | Default | What it does |
 |---|---|---|
-| `--seed N` | random, printed | Controls case order; same seed, same report |
+| `--seed N` | random, printed | Controls case order and fuzzing; same seed, same report |
+| `--suites LIST` | `conf,fuzz,rob,sec` | Which suites to run (`rob` and `sec` arrive later) |
+| `--examples N` | 50 | Generated argument sets per tool (FUZZ) |
 | `--report terminal\|json` | terminal | JSON is versioned and deterministic |
 | `--timeout S` | 10 | Seconds allowed per case |
 | `--startup-timeout S` | 30 | Seconds for the server's first answer (cold `npx`/`uvx`) |
 | `--allow-destructive` | off | Also call tools not marked read-only or non-destructive |
+| `--allow-open-world` | off | Also call tools marked `openWorldHint: true` |
 | `--keep-going` | off | Run later suites even if conformance fails |
 | `--cases-dir DIR` | `.mcpprobe/cases` | Where failing cases are saved |
 
@@ -102,20 +105,57 @@ flags a deprecated feature; `info` is advice and shows as a note.
 | CONF-017 | warn | modern | Results identify the server in `_meta` serverInfo |
 | CONF-018 | error | modern | Cacheable results carry `ttlMs` and `cacheScope` |
 | CONF-020 | error | modern | Protocol version is read from each request, not remembered |
+| FUZZ-001 | error | both | Fuzzed tool arguments never crash the server or go unanswered |
+| FUZZ-002 | error | both | Invalid tool arguments are rejected cleanly, not with an internal error |
+| FUZZ-003 | warn | both | Invalid tool arguments are not accepted as a success |
+| FUZZ-004 | warn | both | Schema-valid tool arguments are not rejected as invalid params |
 | CONF-021 | warn | legacy | `initialize` answers an unsupported version with a supported one |
 | CONF-022 | info | legacy | Server negotiates an outdated revision (2025-03-26 or older) |
 
 `mcpprobe checks explain <ID>` prints what a check sends, what it expects,
 and a link to the spec section.
 
+## Fuzzing
+
+The FUZZ suite calls each tool `--examples` times (default 50) with arguments
+generated from its `inputSchema` by [Hypothesis](https://hypothesis.works/):
+valid values, and near-misses with one thing wrong (a required field missing,
+a wrong type, a value just past a bound, an extra property, null, deep
+nesting, a 100,000-character string, odd Unicode). Each argument set is
+classified as valid or invalid by validating it against the tool's own schema,
+so a finding never rests on MCPProbe's guess. One case per tool,
+`FUZZ-001/<tool>`, judges all four FUZZ checks from the same calls.
+
+Every finding is shrunk to a minimal input (`{"message": ""}` rather than a
+page of random Unicode) and saved as a recording of just that call on a fresh
+server, so `mcpprobe replay` reproduces it in one step. Crashes are shrunk too,
+restarting a stdio server between attempts; requests that are never answered
+are not, since each attempt would cost a full timeout. Calls carry a
+`progressToken`, and a tool that keeps reporting progress gets up to three
+times `--timeout` before MCPProbe moves on (without a finding: slow is not
+stuck).
+
+Generation, shrinking and case order all derive from `--seed`, and shrinking
+is bounded by a call budget rather than a clock, so the same seed gives the
+same report on any machine.
+
+Generation uses hypothesis-jsonschema, which speaks JSON Schema drafts 4 to 7;
+2020-12 schemas (the MCP default) are translated for the generator, and
+keywords with no draft-7 form (`unevaluatedProperties`) only cost coverage,
+never a wrong verdict. Tools whose schemas the generator cannot handle
+(recursive `$ref`, or a remote `$ref`, which MCPProbe never fetches) are
+skipped with the reason.
+
 ## Calling your tools safely
 
-CONF-008 to 011 call real tools. MCPProbe only calls tools marked
-`readOnlyHint: true` or `destructiveHint: false` (MCP treats unannotated tools
-as destructive), never tools marked `openWorldHint: true`, and only with the
-smallest valid arguments built from each `inputSchema`. Any URL it generates
-points at a reserved `.invalid` name. `--allow-destructive` lifts the first
-rule; don't use it against a server connected to real data.
+CONF-008 to 011 and the FUZZ suite call real tools. MCPProbe only calls tools
+marked `readOnlyHint: true` or `destructiveHint: false` (MCP treats unannotated
+tools as destructive), and never tools marked `openWorldHint: true`. Any URL,
+email or hostname it generates points at a reserved `.invalid` name, and IP
+addresses come from the documentation ranges. `--allow-destructive` and
+`--allow-open-world` lift those rules; don't use them against a server
+connected to real data or credentials. Fuzzing sends many unusual inputs, so
+test against a staging copy.
 
 ## Developer tools
 
@@ -161,7 +201,7 @@ src/mcpprobe/
   transport/      raw stdio, HTTP and SSE wire client + byte recorder
   protocol/       request building, era detection, schema instances
   engine/         runner, seeds, check catalog, record and replay
-  suites/         conf/ (fuzz/, rob/, sec/, eval/ to come)
+  suites/         conf/, fuzz/ (rob/, sec/, eval/ to come)
   report/         terminal, json
 checks/           one YAML file per check
 fixtures/servers/ reference server; --break <ID> violates one check
