@@ -192,7 +192,7 @@ every saved recording; pass them again to `replay`.
 | M0 (done) | Raw wire client, recorder, replay, runner |
 | M1 (done, v0.1.0) | Conformance checks for 2026-07-28, JSON report |
 | M2 (done, v0.2.0) | Legacy and dual-era detection and checks |
-| M3 | Schema fuzzing (FUZZ) and robustness (ROB) suites |
+| M3 (done, v0.3.0) | Schema fuzzing (FUZZ) and robustness (ROB) suites |
 | M4 | Security suite, SARIF/JUnit/HTML reports, GitHub Action, `--baseline` |
 | M5 | Model-in-the-loop usability evaluation (EVAL, opt-in) |
 

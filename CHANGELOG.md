@@ -8,7 +8,11 @@ versioned and never silently reused.
 
 ## [Unreleased]
 
-Milestone M3: the FUZZ and ROB suites.
+## [0.3.0] - 2026-10-31
+
+Milestone M3: the FUZZ and ROB suites. The M3 gate holds: the same seed gives
+a byte-identical report, pinned by a snapshot test on every CI platform and
+checked by running six public servers twice.
 
 ### Added
 - FUZZ suite: each tool is called `--examples` times (default 50) with
@@ -38,6 +42,8 @@ Milestone M3: the FUZZ and ROB suites.
   gracefully (stdio notifications, HTTP disconnects); ROB-007 (error)
   concurrent requests each get their own response.
 - `--concurrency N` (default 8) for ROB-007.
+- A snapshot test pins a full CONF + FUZZ + ROB report, so any change to
+  output for the same seed, on any platform, fails CI.
 
 ### Changed
 - The terminal report no longer swallows text in square brackets in messages.
@@ -123,6 +129,7 @@ reports and byte-for-byte replay of every failure.
 - Request metadata header helper for 2026-07-28 (`Mcp-Method`, `Mcp-Name`,
   Base64 sentinel encoding).
 
-[Unreleased]: https://github.com/boyndasouth/MCPProbe/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/boyndasouth/MCPProbe/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v0.3.0
 [0.2.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v0.2.0
 [0.1.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v0.1.0

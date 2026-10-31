@@ -126,6 +126,8 @@ def _summary(result: FuzzResult) -> str:
     last = result.observations[-1] if result.observations else None
     if last is not None and last.verdict.kind == "slow":
         text += f"; stopped early: the last call was {last.verdict.describe()}"
+    elif last is not None and last.verdict.kind in NO_ANSWER:
+        text += f"; stopped early at the {PRIMARY} finding, so later inputs went untested"
     return text
 
 

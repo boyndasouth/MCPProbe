@@ -1,0 +1,486 @@
+# serializer version: 1
+# name: test_full_report_is_pinned
+  '''
+  {
+    "format": "mcpprobe.report",
+    "version": 1,
+    "tool": {
+      "name": "mcpprobe",
+      "version": "<version>"
+    },
+    "seed": 20261031,
+    "server": {
+      "transport": "stdio",
+      "argv": [
+        "<reference server>"
+      ],
+      "env_keys": []
+    },
+    "era": "modern",
+    "exit_code": 1,
+    "summary": {
+      "passed": 36,
+      "failed": 4,
+      "crashed": 1,
+      "timeout": 0,
+      "skipped": 9,
+      "error": 0
+    },
+    "restarts": 1,
+    "stopped_early": false,
+    "results": [
+      {
+        "id": "CONF-001",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation",
+        "repro": null
+      },
+      {
+        "id": "CONF-002/clientCapabilities",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta",
+        "repro": null
+      },
+      {
+        "id": "CONF-002/protocolVersion",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta",
+        "repro": null
+      },
+      {
+        "id": "CONF-003",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation",
+        "repro": null
+      },
+      {
+        "id": "CONF-004",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#result-responses",
+        "repro": null
+      },
+      {
+        "id": "CONF-005/echo",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#requests",
+        "repro": null
+      },
+      {
+        "id": "CONF-005/null-id",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#requests",
+        "repro": null
+      },
+      {
+        "id": "CONF-008",
+        "suite": "CONF",
+        "severity": "info",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
+        "repro": null
+      },
+      {
+        "id": "CONF-009",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta",
+        "repro": null
+      },
+      {
+        "id": "CONF-010",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr#server-requirements-basic-workflow",
+        "repro": null
+      },
+      {
+        "id": "CONF-011",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#output-schema",
+        "repro": null
+      },
+      {
+        "id": "CONF-012",
+        "suite": "CONF",
+        "severity": "warn",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#capabilities",
+        "repro": null
+      },
+      {
+        "id": "CONF-013/handshake",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "skipped",
+        "message": "server does not speak an initialize-era revision (detected era: modern)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization",
+        "repro": null
+      },
+      {
+        "id": "CONF-013/negotiation",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "skipped",
+        "message": "server does not speak an initialize-era revision (detected era: modern)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization",
+        "repro": null
+      },
+      {
+        "id": "CONF-014",
+        "suite": "CONF",
+        "severity": "warn",
+        "status": "skipped",
+        "message": "supportedVersions lists no initialize-era revision",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/discover#discoverresult",
+        "repro": null
+      },
+      {
+        "id": "CONF-015",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio#stdio",
+        "repro": null
+      },
+      {
+        "id": "CONF-016",
+        "suite": "CONF",
+        "severity": "warn",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/deprecated#deprecated",
+        "repro": null
+      },
+      {
+        "id": "CONF-017",
+        "suite": "CONF",
+        "severity": "warn",
+        "status": "failed",
+        "message": "server/discover result has no _meta io.modelcontextprotocol/serverInfo",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta",
+        "repro": "CONF-017.json"
+      },
+      {
+        "id": "CONF-018",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching#cacheable-results",
+        "repro": null
+      },
+      {
+        "id": "CONF-020",
+        "suite": "CONF",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#statelessness",
+        "repro": null
+      },
+      {
+        "id": "CONF-021",
+        "suite": "CONF",
+        "severity": "warn",
+        "status": "skipped",
+        "message": "server does not speak an initialize-era revision (detected era: modern)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#version-negotiation",
+        "repro": null
+      },
+      {
+        "id": "CONF-022",
+        "suite": "CONF",
+        "severity": "info",
+        "status": "skipped",
+        "message": "server does not speak an initialize-era revision (detected era: modern)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#version-negotiation",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-001/ask_name",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "passed",
+        "message": "50 calls (50 with valid arguments, 0 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-001/delete_everything",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "skipped",
+        "message": "tool may be destructive (pass --allow-destructive to include it)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-001/echo",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "crashed",
+        "message": "server stopped responding after this case (failed: tools/call echo with {\"message\": \"\\u0080\"}: the server crashed or closed the connection)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": "FUZZ-001_echo.json"
+      },
+      {
+        "id": "FUZZ-001/get_time",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "passed",
+        "message": "35 calls (1 with valid arguments, 34 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-001/weather",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "passed",
+        "message": "50 calls (4 with valid arguments, 46 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-002/ask_name",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "passed",
+        "message": "50 calls (50 with valid arguments, 0 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-002/delete_everything",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "skipped",
+        "message": "tool may be destructive (pass --allow-destructive to include it)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-002/echo",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "passed",
+        "message": "5 calls (3 with valid arguments, 2 invalid); stopped early at the FUZZ-001 finding, so later inputs went untested",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-002/get_time",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "passed",
+        "message": "35 calls (1 with valid arguments, 34 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-002/weather",
+        "suite": "FUZZ",
+        "severity": "error",
+        "status": "passed",
+        "message": "50 calls (4 with valid arguments, 46 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-003/ask_name",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "passed",
+        "message": "50 calls (50 with valid arguments, 0 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-003/delete_everything",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "skipped",
+        "message": "tool may be destructive (pass --allow-destructive to include it)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-003/echo",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "passed",
+        "message": "5 calls (3 with valid arguments, 2 invalid); stopped early at the FUZZ-001 finding, so later inputs went untested",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-003/get_time",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "passed",
+        "message": "35 calls (1 with valid arguments, 34 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-003/weather",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "passed",
+        "message": "50 calls (4 with valid arguments, 46 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-004/ask_name",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "passed",
+        "message": "50 calls (50 with valid arguments, 0 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-004/delete_everything",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "skipped",
+        "message": "tool may be destructive (pass --allow-destructive to include it)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-004/echo",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "failed",
+        "message": "schema-valid arguments got JSON-RPC error -32602 (message must not be empty): tools/call echo with {\"message\": \"\"}",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
+        "repro": "FUZZ-004_echo.json"
+      },
+      {
+        "id": "FUZZ-004/get_time",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "passed",
+        "message": "35 calls (1 with valid arguments, 34 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
+        "repro": null
+      },
+      {
+        "id": "FUZZ-004/weather",
+        "suite": "FUZZ",
+        "severity": "warn",
+        "status": "passed",
+        "message": "50 calls (4 with valid arguments, 46 invalid)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
+        "repro": null
+      },
+      {
+        "id": "ROB-001",
+        "suite": "ROB",
+        "severity": "warn",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": null
+      },
+      {
+        "id": "ROB-002",
+        "suite": "ROB",
+        "severity": "warn",
+        "status": "failed",
+        "message": "a request without \"jsonrpc\" got a result (and 1 more of 4); expected an error (-32600 Invalid Request)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#requests",
+        "repro": "ROB-002.json"
+      },
+      {
+        "id": "ROB-003",
+        "suite": "ROB",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#protocol-version-header",
+        "repro": null
+      },
+      {
+        "id": "ROB-004",
+        "suite": "ROB",
+        "severity": "warn",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
+        "repro": null
+      },
+      {
+        "id": "ROB-005/10mb",
+        "suite": "ROB",
+        "severity": "error",
+        "status": "failed",
+        "message": "a 10,000,000-byte tools/list request got no JSON-RPC response; it should be answered, or rejected with an error (HTTP 413 is fine)",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": "ROB-005_10mb.json"
+      },
+      {
+        "id": "ROB-005/1mb",
+        "suite": "ROB",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": null
+      },
+      {
+        "id": "ROB-006/stdio",
+        "suite": "ROB",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation#timing-considerations",
+        "repro": null
+      },
+      {
+        "id": "ROB-007",
+        "suite": "ROB",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#responses",
+        "repro": null
+      }
+    ]
+  }
+  
+  '''
+# ---
