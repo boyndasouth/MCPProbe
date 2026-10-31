@@ -58,7 +58,15 @@ BREAKS = {
     "FUZZ-002": "invalid tool arguments get -32603 Internal error",
     "FUZZ-003": "echo accepts a message of any type",
     "FUZZ-004": "echo rejects an empty message with -32602, although its schema allows it",
+    "ROB-001": "malformed JSON is dropped without an answer",
+    "ROB-002": 'requests without jsonrpc: "2.0" are executed anyway',
+    "ROB-003": "unknown methods get -32603 Internal error",
+    "ROB-004": "tools/call with arguments that are not an object gets -32603",
+    "ROB-005": "messages over 2 MB are dropped without an answer",
+    "ROB-006": "notifications/cancelled is answered with an error",
+    "ROB-007": "unknown-method errors carry the id of the previous request",
 }
+MAX_MESSAGE = 2_000_000
 ERAS = ("modern", "legacy", "dual")
 
 TOOLS = [
@@ -114,6 +122,10 @@ class Crash(Exception):
     """Simulated crash: stdio exits; HTTP drops the request without an answer."""
 
 
+class Drop(Exception):
+    """Simulated lost message: stdio writes nothing; HTTP closes the connection."""
+
+
 class Rpc(Exception):
     def __init__(self, code: int, message: str, data: Any = None, status: int = 400) -> None:
         super().__init__(message)
@@ -130,6 +142,7 @@ class Server:
         self.sessions: dict[str, str] = {}
         """Legacy sessions: id -> negotiated version ("stdio" for the process)."""
         self.session_counter = 0
+        self.previous_id: Any = None
 
     @property
     def legacy_supported(self) -> list[str]:
@@ -208,6 +221,10 @@ class Server:
             name = params.get("name")
             arguments = params.get("arguments", {})
             tool = next((t for t in TOOLS if t["name"] == name), None)
+            if "ROB-004" in self.breaks and not isinstance(arguments, dict):
+                raise Rpc(
+                    -32603, "Internal error: 'list' object has no attribute 'get'", status=500
+                )
             problem = None if tool is None else self._invalid(tool, arguments)
             if problem is not None:
                 if "FUZZ-002" in self.breaks:
@@ -251,6 +268,8 @@ class Server:
             raise Rpc(-32602, f"Unknown tool: {name}", status=200 if legacy else 400)
         # A legacy server answers unknown methods like most 2025-era SDKs: HTTP 200
         # with a JSON-RPC error. A modern one uses 404 (streamable-http).
+        if "ROB-003" in self.breaks:
+            raise Rpc(-32603, "Internal error", status=500)
         raise Rpc(-32601, "Method not found", status=200 if legacy else 404)
 
     # ------------------------------------------------------------ legacy era
@@ -374,16 +393,23 @@ class Server:
         self, raw: bytes, session: str | None = None, *, http: bool = False
     ) -> tuple[int, dict[str, Any] | None, str | None]:
         """Process one message. Returns (HTTP status, response or None, new session id)."""
+        if "ROB-005" in self.breaks and len(raw) > MAX_MESSAGE:
+            raise Drop
         try:
             message = json.loads(raw)
         except ValueError:
+            if "ROB-001" in self.breaks:
+                raise Drop from None
             return 400, _error(None, Rpc(-32700, "Parse error")), None
-        if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":
+        lax = "ROB-002" in self.breaks and isinstance(message, dict)
+        if not isinstance(message, dict) or (message.get("jsonrpc") != "2.0" and not lax):
             return 400, _error(None, Rpc(-32600, "Invalid Request")), None
         method = message.get("method")
         if not isinstance(method, str):
             return 400, _error(None, Rpc(-32600, "Invalid Request")), None
         if "id" not in message:
+            if "ROB-006" in self.breaks and method == "notifications/cancelled":
+                return 400, _error(None, Rpc(-32601, "Method not found")), None
             return 202, None, None  # notification: accept, never answer
         mid = message["id"]
         if mid is None or isinstance(mid, (bool, float, list, dict)):
@@ -401,7 +427,10 @@ class Server:
             else:
                 result, new_session = self._legacy(method, params, session, http)
         except Rpc as exc:
+            if exc.code == -32601 and "ROB-007" in self.breaks:
+                mid, self.previous_id = self.previous_id, mid  # shared state, wrong answer
             return exc.status, _error(mid, exc), None
+        self.previous_id = mid
         return 200, {"jsonrpc": "2.0", "id": mid, "result": result}, new_session
 
 
@@ -438,6 +467,8 @@ def serve_stdio(server: Server) -> None:
             _, response, _ = server.handle(raw)
         except Crash:
             sys.exit(98)
+        except Drop:
+            continue
         if response is not None:
             out.write(_dump(response) + b"\n")
             out.flush()
@@ -551,7 +582,7 @@ def make_http_server(server: Server, port: int = 0) -> ThreadingHTTPServer:
                 return
             try:
                 status, response, new_session = server.handle(raw, session, http=True)
-            except Crash:
+            except (Crash, Drop):
                 self.close_connection = True  # drop the request: no status line, no body
                 return
             self._send(status, response, new_session)

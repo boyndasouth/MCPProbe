@@ -1,0 +1,13 @@
+id: ROB-002
+title: Invalid JSON-RPC envelopes are rejected, not executed
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#requests
+description: 'Sends four messages that are valid JSON but not valid MCP requests: no "jsonrpc"
+  member, "jsonrpc": "1.0", a method that is a number, and a JSON array holding one request
+  (MCP has no batching since 2025-06-18, so it is not sent in a 2025-03-26 session; on Streamable HTTP the body MUST be a single request or notification,
+  https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#sending-messages).
+  Each should get a JSON-RPC error, ideally -32600 (Invalid Request), or on HTTP a 4xx status.
+  Fails if one is executed (a result) or gets no answer. A warning, because JSON-RPC 2.0 shows
+  these answers in examples rather than MUSTs; a crash or hang fails the run regardless. Runs
+  once per server, as one case that reports the first failing message and how many failed.'

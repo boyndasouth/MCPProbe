@@ -1,0 +1,12 @@
+id: ROB-004
+title: tools/call with non-object arguments is rejected without an internal error
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling
+description: 'Calls one safe tool (readOnlyHint: true or destructiveHint: false) with arguments
+  that are an array, then a string. Such a request fails the CallToolRequest schema, which the
+  spec lists as a malformed request and answers with a protocol error such as -32602 (Invalid
+  params). Fails if the call is accepted as a success, answered with -32603 (Internal error,
+  meaning the input reached code that did not expect it), or not answered. A tool result with
+  isError: true is accepted. A warning: the spec describes the error kinds rather than
+  requiring a code. Skipped when no tool may be called. Runs once per server.'

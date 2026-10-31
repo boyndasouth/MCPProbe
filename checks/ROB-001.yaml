@@ -1,0 +1,12 @@
+id: ROB-001
+title: Malformed JSON gets a -32700 Parse error
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages
+description: 'Sends a request cut off in the middle of its JSON. All MCP messages MUST follow
+  JSON-RPC 2.0, which answers unparsable input with error -32700 (Parse error) and id null.
+  On Streamable HTTP a 4xx status is accepted too, with or without a JSON-RPC body. A warning,
+  not an error: JSON-RPC 2.0 shows this answer in its examples rather than requiring it in a
+  MUST, and many SDKs log the bad line and answer nothing. A server that crashes or stops
+  answering after the input fails the run regardless, through the liveness probe that follows
+  every case. Runs once per server.'

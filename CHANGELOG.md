@@ -8,7 +8,7 @@ versioned and never silently reused.
 
 ## [Unreleased]
 
-Milestone M3, part 1: the FUZZ suite.
+Milestone M3: the FUZZ and ROB suites.
 
 ### Added
 - FUZZ suite: each tool is called `--examples` times (default 50) with
@@ -29,6 +29,15 @@ Milestone M3, part 1: the FUZZ suite.
   call alive up to three times the timeout, on stdio and Streamable HTTP.
 - A request the server never answers, while it keeps answering others, is
   reported as dropped rather than as a hang.
+- ROB suite, run once per server: ROB-001 (warn) malformed JSON gets -32700;
+  ROB-002 (warn) invalid envelopes (no `jsonrpc`, version 1.0, numeric method,
+  a batch array) are rejected; ROB-003 (error) unknown methods get -32601, with
+  HTTP 404 in the modern era; ROB-004 (warn) `tools/call` with non-object
+  arguments is rejected without -32603; ROB-005 (error) 1 MB and 10 MB
+  requests are answered or rejected; ROB-006 (error) cancellation is handled
+  gracefully (stdio notifications, HTTP disconnects); ROB-007 (error)
+  concurrent requests each get their own response.
+- `--concurrency N` (default 8) for ROB-007.
 
 ### Changed
 - The terminal report no longer swallows text in square brackets in messages.

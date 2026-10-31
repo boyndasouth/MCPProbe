@@ -1,0 +1,11 @@
+id: ROB-007
+title: Concurrent requests each get their own response
+severity: error
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#responses
+description: 'Sends 8 requests (--concurrency) without waiting for answers (on stdio back to back, on HTTP as 8
+  parallel POSTs): half tools/list and half calls to an unknown method, with integer and string
+  ids, in an order taken from the run seed. Responses MUST include the same id as the request
+  they answer. Fails if a request gets no response, gets two, or gets one meant for another
+  request (a tools/list id answered with an error, or an unknown-method id answered with a
+  tool list). Runs once per server.'

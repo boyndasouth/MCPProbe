@@ -1,0 +1,14 @@
+id: ROB-006
+title: Cancellation is handled gracefully
+severity: error
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation#timing-considerations
+description: 'On stdio, sends a request and cancels it at once with notifications/cancelled,
+  then cancels a request that was never sent, then sends a cancellation without a requestId,
+  then a new request. Both parties MUST handle cancellation races gracefully, invalid
+  cancellations SHOULD be ignored, and a notification MUST NOT get a response
+  (https://modelcontextprotocol.io/specification/2026-07-28/basic/index#notifications). A response to the cancelled request itself is allowed (it
+  may have finished first). Fails if any cancellation is answered, or the next request is not.
+  On Streamable HTTP, closing the response stream is the cancellation signal and MUST be
+  treated as one (https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#cancellation): the client disconnects
+  mid-request, and the next request must still be answered. Runs once per server.'

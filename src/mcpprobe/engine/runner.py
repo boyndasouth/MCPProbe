@@ -112,6 +112,8 @@ class CaseContext:
     allow_open_world: bool = False
     fuzz_examples: int = 50
     """Generated arguments per tool for FUZZ cases."""
+    concurrency: int = 8
+    """Requests in flight at once for ROB-007."""
 
     @property
     def capabilities(self) -> dict[str, Any]:
@@ -231,6 +233,7 @@ class Runner:
     allow_destructive: bool = False
     allow_open_world: bool = False
     fuzz_examples: int = 50
+    concurrency: int = 8
     connect: Callable[[ServerSpec], Connection] = field(default=connect)
     _liveness_counter: int = field(default=0, init=False)
     _facts: ServerFacts = field(default_factory=lambda: ServerFacts(Era.MODERN), init=False)
@@ -553,6 +556,7 @@ class Runner:
             tool=case.tool,
             allow_open_world=self.allow_open_world,
             fuzz_examples=self.fuzz_examples,
+            concurrency=self.concurrency,
         )
         budget = (
             self.case_timeout * case.timeout_factor + self.startup_timeout * case.fresh_sessions

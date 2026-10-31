@@ -49,8 +49,9 @@ Useful options for `run`:
 | Option | Default | What it does |
 |---|---|---|
 | `--seed N` | random, printed | Controls case order and fuzzing; same seed, same report |
-| `--suites LIST` | `conf,fuzz,rob,sec` | Which suites to run (`rob` and `sec` arrive later) |
+| `--suites LIST` | `conf,fuzz,rob,sec` | Which suites to run (`sec` arrives in M4) |
 | `--examples N` | 50 | Generated argument sets per tool (FUZZ) |
+| `--concurrency N` | 8 | Requests in flight at once (ROB-007) |
 | `--report terminal\|json` | terminal | JSON is versioned and deterministic |
 | `--timeout S` | 10 | Seconds allowed per case |
 | `--startup-timeout S` | 30 | Seconds for the server's first answer (cold `npx`/`uvx`) |
@@ -109,6 +110,18 @@ flags a deprecated feature; `info` is advice and shows as a note.
 | FUZZ-002 | error | both | Invalid tool arguments are rejected cleanly, not with an internal error |
 | FUZZ-003 | warn | both | Invalid tool arguments are not accepted as a success |
 | FUZZ-004 | warn | both | Schema-valid tool arguments are not rejected as invalid params |
+| ROB-001 | warn | both | Malformed JSON gets a -32700 Parse error |
+| ROB-002 | warn | both | Invalid JSON-RPC envelopes are rejected, not executed |
+| ROB-003 | error | both | Unknown methods get -32601 Method not found |
+| ROB-004 | warn | both | `tools/call` with non-object arguments is rejected without an internal error |
+| ROB-005 | error | both | 1 MB and 10 MB requests are answered or rejected, never dropped |
+| ROB-006 | error | both | Cancellation is handled gracefully |
+| ROB-007 | error | both | Concurrent requests each get their own response |
+
+FUZZ and ROB run once per server, in the modern era when the server speaks
+it: they test how the server handles input, which does not depend on the era.
+The liveness probe after every case turns a crash or hang into a finding,
+whatever the check's severity.
 | CONF-021 | warn | legacy | `initialize` answers an unsupported version with a supported one |
 | CONF-022 | info | legacy | Server negotiates an outdated revision (2025-03-26 or older) |
 
@@ -201,7 +214,7 @@ src/mcpprobe/
   transport/      raw stdio, HTTP and SSE wire client + byte recorder
   protocol/       request building, era detection, schema instances
   engine/         runner, seeds, check catalog, record and replay
-  suites/         conf/, fuzz/ (rob/, sec/, eval/ to come)
+  suites/         conf/, fuzz/, rob/ (sec/, eval/ to come)
   report/         terminal, json
 checks/           one YAML file per check
 fixtures/servers/ reference server; --break <ID> violates one check

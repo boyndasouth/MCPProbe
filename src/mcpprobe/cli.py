@@ -108,6 +108,9 @@ def run(
     examples: Annotated[
         int, typer.Option(min=1, max=10_000, help="Generated argument sets per tool (FUZZ).")
     ] = 50,
+    concurrency: Annotated[
+        int, typer.Option(min=2, max=256, help="Requests in flight at once (ROB-007).")
+    ] = 8,
     baseline: Annotated[
         Path | None, typer.Option(help="Previous JSON report; fail only on new findings.")
     ] = None,
@@ -180,6 +183,7 @@ def run(
         allow_destructive=allow_destructive,
         allow_open_world=allow_open_world,
         fuzz_examples=examples,
+        concurrency=concurrency,
         startup_timeout=startup_timeout,
     )
     try:

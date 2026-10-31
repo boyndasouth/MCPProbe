@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING
 from mcpprobe.engine.catalog import Suite, Transport
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from mcpprobe.engine.catalog import Check
-    from mcpprobe.engine.runner import Case
+    from mcpprobe.engine.runner import Case, CaseContext, Outcome
 
 SUITE_ORDER = (Suite.CONF, Suite.FUZZ, Suite.ROB, Suite.SEC, Suite.EVAL)
 
@@ -28,12 +28,35 @@ class SuiteOptions:
 
 
 def _conf_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
-    from mcpprobe.engine.runner import Case
     from mcpprobe.suites.conf.checks import CASES, FRESH_SESSIONS, TIMEOUT_FACTORS
+
+    return _cases(Suite.CONF, CASES, TIMEOUT_FACTORS, FRESH_SESSIONS, catalog, options)
+
+
+def _rob_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
+    from mcpprobe.suites.rob.checks import CASES, TIMEOUT_FACTORS
+
+    # Robustness does not depend on the era: run each case once per server.
+    return _cases(Suite.ROB, CASES, TIMEOUT_FACTORS, {}, catalog, options, once=True)
+
+
+def _cases(
+    suite: Suite,
+    specs: Sequence[
+        tuple[str, str, Callable[[CaseContext], Awaitable[Outcome]], frozenset[Transport]]
+    ],
+    timeout_factors: Mapping[str, float],
+    fresh_sessions: Mapping[str, int],
+    catalog: Sequence[Check],
+    options: SuiteOptions,
+    *,
+    once: bool = False,
+) -> list[Case]:
+    from mcpprobe.engine.runner import Case
 
     checks = {check.id: check for check in catalog}
     cases: list[Case] = []
-    for check_id, suffix, run, transports in CASES:
+    for check_id, suffix, run, transports in specs:
         check = checks.get(check_id)
         if check is None or options.transport not in transports:
             continue
@@ -42,14 +65,15 @@ def _conf_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
         cases.append(
             Case(
                 id=f"{check_id}/{suffix}" if suffix else check_id,
-                suite=Suite.CONF,
+                suite=suite,
                 severity=check.severity,
                 run=run,
                 title=check.title,
                 era=check.era,
                 spec_ref=check.spec_ref,
-                timeout_factor=TIMEOUT_FACTORS.get(check_id, 1.0),
-                fresh_sessions=FRESH_SESSIONS.get(check_id, 0),
+                timeout_factor=timeout_factors.get(check_id, 1.0),
+                fresh_sessions=fresh_sessions.get(check_id, 0),
+                once=once,
             )
         )
     return cases
@@ -92,7 +116,7 @@ def _fuzz_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
     ]
 
 
-_BUILDERS = {Suite.CONF: _conf_cases, Suite.FUZZ: _fuzz_cases}
+_BUILDERS = {Suite.CONF: _conf_cases, Suite.FUZZ: _fuzz_cases, Suite.ROB: _rob_cases}
 
 
 def collect(
