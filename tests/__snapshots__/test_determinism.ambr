@@ -20,8 +20,8 @@
     "exit_code": 1,
     "baseline": null,
     "summary": {
-      "passed": 36,
-      "failed": 4,
+      "passed": 40,
+      "failed": 5,
       "crashed": 1,
       "timeout": 0,
       "skipped": 9,
@@ -527,6 +527,56 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#responses",
+        "repro": null,
+        "baselined": false
+      },
+      {
+        "id": "SEC-001",
+        "suite": "SEC",
+        "severity": "warn",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#ref-resolution",
+        "repro": null,
+        "baselined": false
+      },
+      {
+        "id": "SEC-002",
+        "suite": "SEC",
+        "severity": "warn",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
+        "repro": null,
+        "baselined": false
+      },
+      {
+        "id": "SEC-003",
+        "suite": "SEC",
+        "severity": "warn",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
+        "repro": null,
+        "baselined": false
+      },
+      {
+        "id": "SEC-006",
+        "suite": "SEC",
+        "severity": "warn",
+        "status": "failed",
+        "message": "tool 'echo' description contains a request to hide something from the user: 'Do not tell the user'",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#user-interaction-model",
+        "repro": "SEC-006.json",
+        "baselined": false
+      },
+      {
+        "id": "SEC-007",
+        "suite": "SEC",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#capabilities",
         "repro": null,
         "baselined": false
       }

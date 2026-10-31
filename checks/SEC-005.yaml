@@ -1,0 +1,16 @@
+id: SEC-005
+title: Authorization is discoverable and invalid tokens are rejected
+severity: error
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery#protected-resource-metadata-discovery-requirements
+transports:
+- http
+description: 'Sends a request with none of the --header values. If the server answers it, it
+  requires no authorization and the check is skipped; pass your token with --header so the
+  rest of the run can proceed. If it requires authorization: the answer MUST be 401
+  (https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#error-handling), the server MUST implement OAuth 2.0 Protected
+  Resource Metadata (RFC 9728) through resource_metadata in a Bearer WWW-Authenticate header or
+  a well-known URI (path-inserted, then root), and the metadata MUST list at least one
+  authorization server (and, per RFC 9728, the resource). A request with an invalid bearer
+  token MUST also get 401 (https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization#token-handling). Metadata is fetched only
+  from the server''s own origin. Runs once per server.'

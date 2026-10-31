@@ -40,6 +40,21 @@ def _rob_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
     return _cases(Suite.ROB, CASES, TIMEOUT_FACTORS, {}, catalog, options, once=True)
 
 
+def _sec_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
+    from mcpprobe.suites.sec.checks import CASES, FRESH_SESSIONS, RELATED, TIMEOUT_FACTORS
+
+    return _cases(
+        Suite.SEC,
+        CASES,
+        TIMEOUT_FACTORS,
+        FRESH_SESSIONS,
+        catalog,
+        options,
+        once=True,
+        related=RELATED,
+    )
+
+
 def _cases(
     suite: Suite,
     specs: Sequence[
@@ -51,8 +66,9 @@ def _cases(
     options: SuiteOptions,
     *,
     once: bool = False,
+    related: Mapping[str, tuple[str, ...]] | None = None,
 ) -> list[Case]:
-    from mcpprobe.engine.runner import Case
+    from mcpprobe.engine.runner import Case, RelatedCheck
 
     checks = {check.id: check for check in catalog}
     cases: list[Case] = []
@@ -74,6 +90,11 @@ def _cases(
                 timeout_factor=timeout_factors.get(check_id, 1.0),
                 fresh_sessions=fresh_sessions.get(check_id, 0),
                 once=once,
+                related=tuple(
+                    RelatedCheck(rel.id, rel.severity, rel.spec_ref)
+                    for rel in (checks.get(r) for r in (related or {}).get(check_id, ()))
+                    if rel is not None
+                ),
             )
         )
     return cases
@@ -116,7 +137,12 @@ def _fuzz_cases(catalog: Sequence[Check], options: SuiteOptions) -> list[Case]:
     ]
 
 
-_BUILDERS = {Suite.CONF: _conf_cases, Suite.FUZZ: _fuzz_cases, Suite.ROB: _rob_cases}
+_BUILDERS = {
+    Suite.CONF: _conf_cases,
+    Suite.FUZZ: _fuzz_cases,
+    Suite.ROB: _rob_cases,
+    Suite.SEC: _sec_cases,
+}
 
 
 def collect(

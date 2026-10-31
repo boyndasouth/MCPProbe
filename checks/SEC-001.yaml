@@ -1,0 +1,13 @@
+id: SEC-001
+title: Tool schemas do not depend on a network $ref
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#ref-resolution
+description: 'Scans every tool''s inputSchema and outputSchema for a $ref that points outside
+  the schema (an http(s) or other absolute URI). Implementations MUST NOT automatically
+  dereference $ref values that resolve to a network URI, and schemas that fail to validate
+  because of an unresolved external $ref SHOULD be rejected, so a client cannot validate
+  arguments or results for such a tool. MCPProbe cannot observe whether the server itself
+  fetches remote $refs (no MCP message sends the server a schema to validate), so this check
+  covers the half that is visible: the server''s own published schemas. Inline the referenced
+  definitions under $defs instead. Runs once per server.'

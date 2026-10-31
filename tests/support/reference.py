@@ -26,8 +26,8 @@ reference = _load_reference()
 
 
 class HttpFixture:
-    def __init__(self, breaks: set[str], era: str = "modern") -> None:
-        self.httpd = reference.make_http_server(reference.Server(breaks, era))
+    def __init__(self, breaks: set[str], era: str = "modern", token: str | None = None) -> None:
+        self.httpd = reference.make_http_server(reference.Server(breaks, era, token))
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}/mcp"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 

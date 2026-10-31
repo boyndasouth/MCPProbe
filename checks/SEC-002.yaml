@@ -1,0 +1,14 @@
+id: SEC-002
+title: Errors carry no stack traces
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations
+description: 'Sends requests that should fail (an unknown method, an unknown tool, an invalid
+  cursor, and for up to five tools that may be called a call with no arguments and one with
+  arguments of the wrong type), then looks for stack traces in JSON-RPC error messages and
+  data and in tool results marked isError: Python tracebacks and frames, JavaScript, Java and
+  .NET stack frames, Go and Rust panics. Servers MUST validate all tool inputs and sanitize tool
+  outputs; a stack trace shows the input reached code that did not expect it and tells an
+  attacker about the server''s internals. A heuristic, so a warning; patterns match only
+  well-formed frames. Tools are called only under the usual safety rules. Runs once per
+  server.'

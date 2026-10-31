@@ -1,0 +1,12 @@
+id: SEC-003
+title: Responses carry no secrets
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations
+description: 'Judged from the SEC-002 traffic. Fails if a value passed to a stdio server with
+  --env (8 characters or longer) comes back in an answer, or if an answer contains something
+  shaped like a credential: an AWS access key, a GitHub, Slack, Stripe live or sk- API token, a
+  Google API key, a private key block, or a JSON Web Token. Servers MUST sanitize tool
+  outputs. The report names the kind of secret and shows at most its first four characters,
+  and the value is masked in the saved recording. A heuristic, so a warning. Runs once per
+  server.'

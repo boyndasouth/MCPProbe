@@ -1,0 +1,14 @@
+id: SEC-004
+title: A local HTTP server listens on loopback only
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#security--endpoint
+transports:
+- http
+description: 'When the server URL is on this machine (localhost, 127.0.0.1 or ::1), tries to
+  open a TCP connection to the same port on this machine''s network address. When running
+  locally, servers SHOULD bind only to localhost (127.0.0.1) rather than all network
+  interfaces (0.0.0.0); otherwise anything on the network can reach the server. Skipped for
+  remote servers and on machines without a network address. Origin validation is CONF-007;
+  a request without an Origin header is not flagged, because non-browser clients never send
+  one. Runs once per server.'

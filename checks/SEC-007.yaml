@@ -1,0 +1,12 @@
+id: SEC-007
+title: The tool list does not change between connections or after a call
+severity: error
+era: modern
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#capabilities
+description: 'Lists the tools, calls one tool that may be called (with the smallest valid
+  arguments), lists them again, then lists them on a second connection. The set of tools MUST
+  NOT vary per connection or as a side effect of other requests on the connection. A tool
+  whose definition changes after it has been approved (a "rug pull") is how a malicious server
+  slips past a user''s review. Definitions are compared in full, ignoring _meta and order
+  (order is CONF-012). 2026-07-28 only: initialize-era sessions were stateful. Runs once per
+  server.'

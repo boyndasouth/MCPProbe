@@ -28,7 +28,7 @@ from mcpprobe.transport.errors import TransportTimeout
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from mcpprobe.engine.connection import Reply
+    from mcpprobe.engine.connection import Connection, Reply
     from mcpprobe.engine.runner import CaseContext
 
 JsonObject = dict[str, Any]
@@ -97,14 +97,17 @@ def unsafe_reason(
     return "may be destructive (pass --allow-destructive to include it)"
 
 
-async def list_tools(ctx: CaseContext, allow_destructive: bool) -> ToolInventory:
-    """All tools from tools/list (following pagination), split into callable and skipped."""
+async def fetch_tools(
+    ctx: CaseContext, connection: Connection | None = None, label: str = "list"
+) -> list[JsonObject]:
+    """Every tool definition from tools/list, following pagination, in server order."""
     tools: list[JsonObject] = []
     cursor: str | None = None
+    target = connection or ctx.connection
     for page in range(20):
         params: JsonObject = {"cursor": cursor} if cursor else {}
-        reply = await ctx.connection.call(
-            era_request(ctx, "tools/list", f"{ctx.case_id}-list-{page}", params), ctx.timeout
+        reply = await target.call(
+            era_request(ctx, "tools/list", f"{ctx.case_id}-{label}-{page}", params), ctx.timeout
         )
         result = reply.result
         if not isinstance(result, dict) or not isinstance(result.get("tools"), list):
@@ -113,6 +116,12 @@ async def list_tools(ctx: CaseContext, allow_destructive: bool) -> ToolInventory
         cursor = result.get("nextCursor") if isinstance(result.get("nextCursor"), str) else None
         if not cursor:
             break
+    return tools
+
+
+async def list_tools(ctx: CaseContext, allow_destructive: bool) -> ToolInventory:
+    """All tools from tools/list (following pagination), split into callable and skipped."""
+    tools = await fetch_tools(ctx)
 
     callable_tools: list[CallableTool] = []
     skipped: list[tuple[str, str]] = []

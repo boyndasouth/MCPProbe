@@ -61,7 +61,7 @@ Useful options for `run`:
 | Option | Default | What it does |
 |---|---|---|
 | `--seed N` | random, printed | Controls case order and fuzzing; same seed, same report |
-| `--suites LIST` | `conf,fuzz,rob,sec` | Which suites to run (`sec` arrives in M4) |
+| `--suites LIST` | `conf,fuzz,rob,sec` | Which suites to run |
 | `--examples N` | 50 | Generated argument sets per tool (FUZZ) |
 | `--concurrency N` | 8 | Requests in flight at once (ROB-007) |
 | `--report FORMAT` | terminal | `terminal`, `json`, `junit`, `sarif` or `html`; all deterministic |
@@ -132,9 +132,22 @@ flags a deprecated feature; `info` is advice and shows as a note.
 | ROB-005 | error | both | 1 MB and 10 MB requests are answered or rejected, never dropped |
 | ROB-006 | error | both | Cancellation is handled gracefully |
 | ROB-007 | error | both | Concurrent requests each get their own response |
+| SEC-001 | warn | both | Tool schemas do not depend on a network `$ref` |
+| SEC-002 | warn | both | Errors carry no stack traces |
+| SEC-003 | warn | both | Responses carry no secrets (`--env` values, credential-shaped strings) |
+| SEC-004 | warn | both, HTTP | A local HTTP server listens on loopback only |
+| SEC-005 | error | both, HTTP | Authorization is discoverable (RFC 9728) and invalid tokens get 401 |
+| SEC-006 | warn | both | Tool metadata holds no injection-style instructions or hidden characters |
+| SEC-007 | error | modern | The tool list does not change between connections or after a call |
 
-FUZZ and ROB run once per server, in the modern era when the server speaks
-it: they test how the server handles input, which does not depend on the era.
+FUZZ, ROB and SEC run once per server, in the modern era when the server
+speaks it: they test how the server handles input, which does not depend on
+the era.
+
+SEC-005 only applies to HTTP servers that require authorization. Give
+MCPProbe a valid token with `--header "Authorization: Bearer ..."`: SEC-005
+then checks what a client without one (or with a bad one) is told. Secrets
+found by SEC-003 are never printed in full and are masked in saved cases.
 The liveness probe after every case turns a crash or hang into a finding,
 whatever the check's severity.
 | CONF-021 | warn | legacy | `initialize` answers an unsupported version with a supported one |
@@ -229,7 +242,7 @@ src/mcpprobe/
   transport/      raw stdio, HTTP and SSE wire client + byte recorder
   protocol/       request building, era detection, schema instances
   engine/         runner, seeds, check catalog, record and replay
-  suites/         conf/, fuzz/, rob/ (sec/, eval/ to come)
+  suites/         conf/, fuzz/, rob/, sec/ (eval/ in M5)
   report/         terminal, json
 checks/           one YAML file per check
 fixtures/servers/ reference server; --break <ID> violates one check

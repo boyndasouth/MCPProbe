@@ -40,3 +40,5 @@ uv run pytest
    `tests/test_conf.py` then runs it against the passing and failing fixture
    on every transport it applies to.
 5. Add a line to `CHANGELOG.md`.
+6. If the check (or any change) departs from the MCPProbe spec, add a row to
+   [docs/decisions.md](docs/decisions.md) in the same commit, marked Review.

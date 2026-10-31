@@ -39,8 +39,10 @@ def http_url() -> Iterator[str]:
 def http_fixture() -> Iterator[Any]:
     fixtures: list[HttpFixture] = []
 
-    def start(breaks: set[str] | None = None, era: str = "modern") -> HttpFixture:
-        fixture = HttpFixture(breaks or set(), era)
+    def start(
+        breaks: set[str] | None = None, era: str = "modern", token: str | None = None
+    ) -> HttpFixture:
+        fixture = HttpFixture(breaks or set(), era, token)
         fixtures.append(fixture)
         return fixture
 

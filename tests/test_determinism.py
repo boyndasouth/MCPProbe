@@ -1,6 +1,6 @@
 """The M3 gate: the same seed gives an identical report.
 
-A full run (CONF, FUZZ and ROB, with findings in every suite) against the
+A full run (CONF, FUZZ, ROB and SEC, with findings in every suite) against the
 reference server is pinned as a snapshot. CI runs it on Linux, macOS and
 Windows with Python 3.11 to 3.13, so the snapshot also proves the report does
 not depend on the platform or the interpreter. Only the server's command line
@@ -29,8 +29,8 @@ if TYPE_CHECKING:
     from syrupy.assertion import SnapshotAssertion
 
 # One finding in each suite, a crash that is shrunk across restarts, and a warn.
-BREAKS = ("CONF-017", "FUZZ-001", "FUZZ-004", "ROB-002", "ROB-005")
-SUITES = [Suite.CONF, Suite.FUZZ, Suite.ROB]
+BREAKS = ("CONF-017", "FUZZ-001", "FUZZ-004", "ROB-002", "ROB-005", "SEC-006")
+SUITES = [Suite.CONF, Suite.FUZZ, Suite.ROB, Suite.SEC]
 
 
 async def _report(tmp_path: Path, seed: int) -> tuple[str, dict[str, str]]:

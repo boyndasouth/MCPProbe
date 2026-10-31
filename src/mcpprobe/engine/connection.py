@@ -139,6 +139,8 @@ class StdioConnection:
         )
         self.legacy_version: str | None = None
         """Set once a legacy initialize handshake succeeded on this connection."""
+        self.extra_secrets: set[str] = set()
+        """Secrets the server revealed (SEC-003), masked in saved recordings too."""
 
     async def start(self) -> None:
         await self.stdio.start()
@@ -156,7 +158,7 @@ class StdioConnection:
         )
 
     def masker(self) -> Masker:
-        return Masker(self.spec.env.values())
+        return Masker([*self.spec.env.values(), *self.extra_secrets])
 
     async def call(
         self, message: JsonObject | bytes, timeout: float, *, max_timeout: float | None = None
@@ -214,6 +216,8 @@ class HttpConnection:
         self._closed = False
         self.legacy_version: str | None = None
         """Set once a legacy initialize handshake succeeded on this connection."""
+        self.extra_secrets: set[str] = set()
+        """Secrets the server revealed (SEC-003), masked in saved recordings too."""
 
     async def start(self) -> None:
         """HTTP servers are not ours to start; this only resets per-connection state."""
@@ -231,7 +235,7 @@ class HttpConnection:
         return HttpTarget(url=self.spec.url)
 
     def masker(self) -> Masker:
-        masker = Masker()
+        masker = Masker(self.extra_secrets)
         masker.add_headers(self.spec.headers)
         return masker
 

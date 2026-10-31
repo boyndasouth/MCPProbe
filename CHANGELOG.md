@@ -8,7 +8,7 @@ versioned and never silently reused.
 
 ## [Unreleased]
 
-Milestone M4, part 1: reports and baseline mode.
+Milestone M4: reports, baseline mode and the SEC suite.
 
 ### Added
 - `--report junit`: one test case per case; findings that fail the run are
@@ -21,6 +21,15 @@ Milestone M4, part 1: reports and baseline mode.
   shown as known and do not fail the run (or stop later suites); only new
   ones do. The JSON report gains `baseline` and per-result `baselined`.
 - The determinism tests now cover every report format.
+- SEC suite, run once per server: SEC-001 (warn) no network `$ref` in tool
+  schemas; SEC-002 (warn) no stack traces in errors; SEC-003 (warn) no
+  secrets in responses, never printed in full and masked in saved cases;
+  SEC-004 (warn) local HTTP servers bind to loopback; SEC-005 (error)
+  authorization is discoverable through Protected Resource Metadata and
+  invalid tokens get 401; SEC-006 (warn) no injection-style text or hidden
+  characters in tool metadata; SEC-007 (error) the tool list does not change
+  between connections or after a call.
+- Reference fixture: `--require-token` for HTTP authorization tests.
 
 ### Changed
 - The package is published as `mcpprobe-cli` (the command and import name

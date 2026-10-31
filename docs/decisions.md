@@ -1,0 +1,122 @@
+# Decisions and departures from the spec
+
+The MCPProbe spec ("MCPProbe — MCP Conformance Fuzzer & Evaluator Spec",
+Oct 29, 2026) is the source of truth. Where the code differs from it, the
+difference and the reason are recorded here. When a later milestone starts,
+read this file alongside the spec: an entry here overrides the spec text it
+names.
+
+How the sources rank when they disagree:
+
+1. **The MCP specification (modelcontextprotocol.io)** decides what a server
+   MUST or SHOULD do. Every check cites it.
+2. **Behaviour of real servers** decides whether a check is precise enough
+   to ship: a check that is correct but flags most servers for the same SDK
+   habit is reshaped or downgraded.
+3. **The MCPProbe spec** sets goals, priorities and scope. Its principles
+   (determinism, cite the spec, "a false positive costs more trust than a
+   missed bug") have held; some of its details were guesses made before any
+   real server was run.
+
+Each entry has a status:
+
+- **Approved**: Shiwin chose it when asked.
+- **Review**: a judgment call made during the build. It is reasonable, but
+  nobody signed it off; confirm or reverse it.
+- **Open**: in the spec but not built yet.
+
+Last updated: 2026-10-31, during M4 (after the SEC suite, before the GitHub
+Action, docs site and PyPI release).
+
+---
+
+## Packaging and release
+
+| # | The spec says | What was built | Why | Status |
+|---|---|---|---|---|
+| D1 | Package `mcpprobe` on PyPI ("Is the name free? Check before the first commit") | Distribution `mcpprobe-cli`; the command and import name stay `mcpprobe` | `mcpprobe` is technically free, but PyPI compares names with hyphens removed, and an unrelated MCP security scanner, `mcp-probe`, exists. The upload would be rejected as too similar | Approved |
+| D2 | GitHub Action at `uses: <owner>/mcpprobe-action@v1` (a separate repo), but the repo layout shows an `action/` folder | The Action lives in this repo (`uses: boyndasouth/MCPProbe@v1`) | One repo, so the Action and the tool are always versioned together | Approved (M4 batch 3) |
+| D3 | M4 ends in the v1.0 release; v1.0 success criteria include "adopted in CI by at least 3 public MCP server repos that aren't mine" | v1.0.0 is tagged at the end of M4 | Adoption can only happen after a release; it is tracked as a goal, not a release blocker | Approved |
+| D4 | Reports use `sarif-om` for SARIF | SARIF is written as plain JSON; `sarif-om` was removed | `sarif-om` needs extra serializer packages and cannot guarantee key order (determinism). Output is validated against the official SARIF 2.1.0 schema in tests | Review |
+
+## Configuration and CLI
+
+| # | The spec says | What was built | Why | Status |
+|---|---|---|---|---|
+| D5 | Config example: `fuzz_examples_per_tool = 200` | Default 50 (`--examples`) | 200 × 20 tools is 4,000 calls plus shrinking, which cannot meet the v1.0 target of "under 60 seconds for a 20-tool server" | Approved |
+| D6 | "Destructive tools (`destructiveHint: true`) are skipped unless `--allow-destructive`" | A tool is called only if marked `readOnlyHint: true` or `destructiveHint: false`; unannotated tools are skipped too. `openWorldHint: true` tools need `--allow-open-world` | MCP's annotation defaults treat an unannotated tool as destructive and open-world. Calling open-world tools with random input would send traffic to hosts the user never named, which the spec forbids | Approved (open-world flag); Review (unannotated = destructive, in place since M1) |
+| D7 | Concurrency "(default 8)" | `--concurrency N`, default 8 | The spec's wording implies it is configurable | Review |
+| D8 | `--report sarif` with GitHub code scanning | SARIF alerts point at line 1 of a repo file: `--sarif-path`, else the server's entry file from the stdio command, else `README.md` | Code scanning only shows alerts that have a file location, and a server finding has none | Review |
+| D9 | `mcpprobe replay .mcpprobe/cases/FUZZ-003-7f2a.json` (hash in the name) | Cases are saved as `<case id>.json` (`FUZZ-003_echo.json`) | Names derived only from the case id keep runs byte-identical | Review |
+
+## Conformance (CONF)
+
+| # | The spec says | What was built | Why | Status |
+|---|---|---|---|---|
+| D10 | CONF-008: tool failures return `isError: true`, not a protocol error (error) | CONF-008 (info): unknown tools get a JSON-RPC error, not a tool result | The section it would enforce has no MUST or SHOULD | Approved (M1) |
+| D11 | CONF-012: deterministic `tools/list` order *and* `ttlMs`/`cacheScope` present (warn) | CONF-012 (warn) covers order; CONF-018 (error) covers caching hints | The current MCP text says servers MUST include caching hints, so that half is an error | Review |
+| D12 | CONF-014: a dual-era server serves both eras on the same endpoint (error) | CONF-014 (warn): initialize-era versions listed in `supportedVersions` really work | Era detection already proves both eras are served (a dual-era result requires it); what remained testable is whether advertised versions work. Warn because the MCP spec does not say `supportedVersions` covers initialize-era versions | Review |
+| D13 | CONF-016: deprecated roots, sampling *or* logging in use (warn) | CONF-016 covers the logging capability only | Roots and sampling are client features; a server cannot "use" them except through input requests | Review |
+| D14 | The CONF table ends at CONF-016 | Added CONF-017 (serverInfo, warn), CONF-018 (caching hints), CONF-020 (statelessness), CONF-021 (version counter-offer, warn), CONF-022 (outdated revision, info). There is no CONF-019 | Each has a MUST or SHOULD behind it. CONF-019 was dropped after it turned out to rest on a wrong reading of the spec; IDs are never reused | Review |
+| D15 | CONF-002: a request missing `_meta` fields returns -32602 | On dual-era servers any error is accepted | A dual-era server cannot tell which era a request without a protocol version belongs to | Review |
+
+## Fuzzing (FUZZ)
+
+| # | The spec says | What was built | Why | Status |
+|---|---|---|---|---|
+| D16 | Lists fuzzing behaviour without check IDs | FUZZ-001 (error): no crash or unanswered request; FUZZ-002 (error): invalid input not met with -32603 or a non-JSON-RPC reply; FUZZ-003 (warn): invalid input not accepted; FUZZ-004 (warn): valid input not rejected with -32602 | One check per behaviour, judged from the same calls | Approved (FUZZ-003 as warn); Review (the rest) |
+| D17 | "Invalid inputs return `isError: true` or -32602" | FUZZ-002 fails only on -32603 or a reply that is not JSON-RPC; any other specific error passes | Servers check capabilities or headers before arguments and legitimately answer -32021 or -32020; flagging those would be false positives | Review |
+| D18 | Generation with hypothesis-jsonschema from JSON Schema 2020-12 | hypothesis-jsonschema supports drafts 4–7 only, so 2020-12 schemas are translated for the generator. Every value is still judged by a real 2020-12 validator | "The generator proposes, the validator decides": gaps cost coverage, never a wrong verdict | Review |
+| D19 | Near-miss inputs include arguments that are not an object | Moved to ROB-004, one case per server | It breaks the request format, not the tool schema; per tool it flagged the same SDK bug on every tool (7–10 findings per server) | Review |
+| D20 | Invalid inputs must never produce a stack trace | Stack traces are detected by SEC-002, from its own probes | One check per behaviour. Cost: a trace triggered only by one odd fuzz input can be missed | Review |
+| D21 | "Shrink every failure to a minimal reproducing input" | Crashes and wrong answers are shrunk; hangs and dropped requests are not | Each shrink attempt on an unanswered request costs a full timeout | Review |
+| D22 | A dual-era server "gets both suites" | FUZZ, ROB and SEC run once per server, in the modern era when it is spoken | Input handling does not depend on the era; running twice doubled the time | Review |
+| D23 | (not in the spec) | Calls carry a `progressToken`; progress keeps a slow call alive up to 3× the timeout; "slow", "dropped" and "hung" are told apart | Without it, server-everything's long-running tool was reported as a hang | Review |
+
+## Robustness (ROB)
+
+| # | The spec says | What was built | Why | Status |
+|---|---|---|---|---|
+| D24 | Lists robustness behaviour without IDs or severities | ROB-001 to ROB-007. ROB-001 (parse error), ROB-002 (invalid envelopes) and ROB-004 (non-object arguments) are warnings | JSON-RPC shows those answers in examples rather than MUSTs, and both official SDKs drop malformed lines silently. Crashes and hangs still fail the run | Review |
+| D25 | (not in the spec) | ROB-002's four envelope variants are one case; the batch variant is skipped in 2025-03-26 sessions | One finding per server instead of four; 2025-03-26 allowed JSON-RPC batching | Review |
+
+## Security (SEC)
+
+| # | The spec says | What was built | Why | Status |
+|---|---|---|---|---|
+| D26 | "HTTP server rejects missing or foreign Origin" | Missing Origin is not flagged; foreign Origin stays CONF-007 | MCP only requires rejecting a present, invalid Origin; non-browser clients send none | Approved |
+| D27 | "Server does not auto-fetch network `$ref` URIs" | SEC-001 flags remote `$ref`s in the server's own tool schemas | Fetching cannot be observed: no MCP message sends a server a schema to validate | Review |
+| D28 | "No stack traces, file paths or secret-looking strings" | SEC-002 (stack traces) and SEC-003 (secrets) are separate warnings; file paths count only inside stack traces | The filesystem and git servers echo paths by design. Secrets are never printed in full and are masked in saved cases | Review |
+| D29 | Tool descriptions scanned for injection-style text (heuristic, warn) | SEC-006 (warn) | No MCP MUST or SHOULD covers it, which conflicts with the spec's own rule "no check without a MUST/SHOULD behind it"; shipped because the SEC list asks for it explicitly | Review |
+| D30 | OAuth checks for servers with authorization | SEC-005 runs only when a token is passed with `--header`; metadata is fetched only from the server's own origin | Without credentials the run cannot get past the server; fetching other hosts would break the no-unrequested-traffic rule | Review |
+| D31 | Tool list stable across calls | SEC-007 (error) checks the list across a tool call and a second connection; modern era only | Initialize-era sessions were stateful, so per-session differences were allowed there | Review |
+
+## Reports
+
+| # | The spec says | What was built | Why | Status |
+|---|---|---|---|---|
+| D32 | JUnit: "one test case per check" | One test case per case (`FUZZ-001/echo`); only findings that fail the run are `<failure>`s, warnings and notes are written to `<system-out>` | Per-case is more useful; the CI test tab then agrees with the exit code | Review |
+| D33 | `--baseline probe.json` fails only on new findings | Matched by case id; known findings also do not stop later suites | Case ids are stable across runs; messages (e.g. shrunk inputs) are not | Review |
+
+---
+
+## Not built yet
+
+| # | The spec says | Where it stands |
+|---|---|---|
+| O1 | Optional `mcpprobe.toml` (`[server]`, `[run]`, `[checks] disable`, `severity_overrides`, `[eval]`) | Not implemented; everything is a CLI flag. Needed for the Action and for "disable a check" | 
+| O2 | "Dry-run mode lists what would be called" (Safety) | Not implemented |
+| O3 | "Per-request and total timeouts" | Per-case and per-call timeouts exist; there is no total run timeout |
+| O4 | Pydantic message models generated from the official JSON Schema per revision | Requests are built by hand in `protocol/` on purpose (the raw wire client must be able to send malformed messages); there are no generated models. Decide whether they are still wanted |
+| O5 | GitHub Action, docs site, PyPI via trusted publishing, signed releases | M4 batch 3 |
+| O6 | Run on 10+ public servers, review every finding by hand, no known false positives | M4 gate |
+| O7 | EVAL suite | M5 (v1.1) |
+
+O1–O3 sit under the spec's production-grade requirements, so they should land
+before v1.0.0, together with batch 3 or the gate.
+
+## Keeping this file current
+
+Any change that departs from the spec adds a row here in the same commit,
+marked Review until Shiwin confirms it. When the spec itself is revised to
+match, the row moves to a short "Folded into the spec" list.

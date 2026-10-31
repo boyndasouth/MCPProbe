@@ -1,0 +1,13 @@
+id: SEC-006
+title: Tool metadata holds no injection-style instructions
+severity: warn
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/server/tools#user-interaction-model
+description: 'Scans each tool''s name, title, description and inputSchema descriptions for text
+  aimed at the model rather than the user: instructions to ignore earlier instructions,
+  requests to hide something from the user, pseudo-tags such as <IMPORTANT>, references to
+  sensitive local files (~/.ssh, id_rsa, ~/.aws, mcp.json), and invisible characters
+  (zero-width, bidirectional controls, Unicode tag characters). Models read tool
+  descriptions, and the spec asks for a human in the loop who can see what tools do, which
+  hidden or manipulative text defeats. No MUST or SHOULD names this pattern directly, so it is
+  a heuristic warning, as the MCPProbe spec requires. Runs once per server.'
