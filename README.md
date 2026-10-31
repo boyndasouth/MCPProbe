@@ -3,11 +3,11 @@
 Tells an MCP server author, in one run, whether their server is spec-compliant,
 robust to bad input, and usable by a real model.
 
-> **Status: v0.2.0, pre-alpha.** 21 conformance checks over stdio and
-> Streamable HTTP for the stateless **2026-07-28** revision *and* the legacy
-> `initialize` era (2025-11-25, 2025-06-18). Each server is classified as
-> modern, legacy, dual-era or unknown, and only the checks for the era(s) it
-> speaks run.
+> **Status: v0.3.0, pre-alpha.** Conformance (CONF), schema fuzzing (FUZZ)
+> and robustness (ROB) suites over stdio and Streamable HTTP, for the
+> stateless **2026-07-28** revision *and* the legacy `initialize` era
+> (2025-11-25, 2025-06-18). Each server is classified as modern, legacy,
+> dual-era or unknown, and only the checks for the era(s) it speaks run.
 
 Every check cites the spec section it enforces, every failure is saved as a
 byte-for-byte replayable case, and the same seed always gives the same report.
@@ -17,10 +17,14 @@ byte-for-byte replayable case, and the same seed always gives the same report.
 Requires Python 3.11+. No compiler needed on any platform.
 
 ```bash
-pipx install git+https://github.com/boyndasouth/MCPProbe@v0.2.0
+pipx install git+https://github.com/boyndasouth/MCPProbe@v0.3.0
 # or, inside a project
-uv add git+https://github.com/boyndasouth/MCPProbe@v0.2.0
+uv add git+https://github.com/boyndasouth/MCPProbe@v0.3.0
 ```
+
+From v1.0 it will be on PyPI as **`mcpprobe-cli`** (`pipx install mcpprobe-cli`);
+the command stays `mcpprobe`. (PyPI treats "mcpprobe" as too similar to an
+unrelated existing project, "mcp-probe".)
 
 ## Usage
 
@@ -35,6 +39,14 @@ mcpprobe run --http http://127.0.0.1:8000/mcp --header "Authorization: Bearer $T
 
 # Reproducible run with a machine-readable report
 mcpprobe run --stdio "node dist/index.js" --seed 42 --report json -o probe.json
+
+# Reports for CI: JUnit for test tabs, SARIF for GitHub code scanning, HTML to share
+mcpprobe run --stdio "node dist/index.js" --report sarif -o probe.sarif
+mcpprobe run --stdio "node dist/index.js" --report html -o probe.html
+
+# Adopt in CI without fixing everything first: fail only on new findings
+mcpprobe run --stdio "node dist/index.js" --report json -o probe-baseline.json  # once, commit it
+mcpprobe run --stdio "node dist/index.js" --baseline probe-baseline.json
 
 # Re-run one failure byte for byte against a fresh server
 mcpprobe replay .mcpprobe/cases/CONF-020.json
@@ -52,7 +64,10 @@ Useful options for `run`:
 | `--suites LIST` | `conf,fuzz,rob,sec` | Which suites to run (`sec` arrives in M4) |
 | `--examples N` | 50 | Generated argument sets per tool (FUZZ) |
 | `--concurrency N` | 8 | Requests in flight at once (ROB-007) |
-| `--report terminal\|json` | terminal | JSON is versioned and deterministic |
+| `--report FORMAT` | terminal | `terminal`, `json`, `junit`, `sarif` or `html`; all deterministic |
+| `-o FILE` | stdout | Where a non-terminal report goes (the summary then prints on stderr) |
+| `--baseline FILE` | none | A previous JSON report: its findings are shown as known and don't fail the run |
+| `--sarif-path PATH` | entry file | Repository file SARIF alerts point at (code scanning needs one) |
 | `--timeout S` | 10 | Seconds allowed per case |
 | `--startup-timeout S` | 30 | Seconds for the server's first answer (cold `npx`/`uvx`) |
 | `--allow-destructive` | off | Also call tools not marked read-only or non-destructive |

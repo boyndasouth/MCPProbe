@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 
 from mcpprobe.engine.catalog import Suite, Transport, load_catalog
 from mcpprobe.engine.runner import Runner, Status
+from mcpprobe.report import html, junit, sarif
+from mcpprobe.report.common import ReportContext
 from mcpprobe.report.json_report import build
 from mcpprobe.suites import SuiteOptions, collect
 from tests.support.reference import stdio_spec
@@ -32,6 +34,12 @@ SUITES = [Suite.CONF, Suite.FUZZ, Suite.ROB]
 
 
 async def _report(tmp_path: Path, seed: int) -> tuple[str, dict[str, str]]:
+    text, saved, _ = await _run(tmp_path, seed)
+    return text, saved
+
+
+async def _run(tmp_path: Path, seed: int) -> tuple[str, dict[str, str], dict[str, str]]:
+    """The normalised JSON report, the saved cases, and every other report format."""
     spec = stdio_spec(BREAKS)
     plan = collect(SUITES, load_catalog(), SuiteOptions(transport=Transport.STDIO))
     cases = tmp_path / "cases"
@@ -42,7 +50,13 @@ async def _report(tmp_path: Path, seed: int) -> tuple[str, dict[str, str]]:
     report["tool"]["version"] = "<version>"  # so a release does not invalidate the snapshot
     saved = {path.name: path.read_text(encoding="utf-8") for path in sorted(cases.iterdir())}
     assert any(r.status is Status.CRASHED for r in result.results)  # the shrunk crash ran
-    return json.dumps(report, indent=2, ensure_ascii=False) + "\n", saved
+    ctx = ReportContext.build(result, load_catalog(), ".mcpprobe/cases")
+    formats = {
+        "junit": junit.dumps(ctx),
+        "sarif": sarif.dumps(ctx, "server.py"),
+        "html": html.dumps(ctx, spec).replace(" ".join(spec.argv), "<reference server>"),
+    }
+    return json.dumps(report, indent=2, ensure_ascii=False) + "\n", saved, formats
 
 
 async def test_full_report_is_pinned(tmp_path: Path, snapshot: SnapshotAssertion) -> None:
@@ -51,9 +65,10 @@ async def test_full_report_is_pinned(tmp_path: Path, snapshot: SnapshotAssertion
 
 
 async def test_same_seed_twice_gives_identical_report_and_cases(tmp_path: Path) -> None:
-    first, first_cases = await _report(tmp_path / "a", seed=11)
-    second, second_cases = await _report(tmp_path / "b", seed=11)
+    first, first_cases, first_formats = await _run(tmp_path / "a", seed=11)
+    second, second_cases, second_formats = await _run(tmp_path / "b", seed=11)
     assert first == second
+    assert first_formats == second_formats  # JUnit, SARIF and HTML too
     assert first_cases.keys() == second_cases.keys()
     for name, text in first_cases.items():
         # Recordings hold the server's argv; both runs used the same one.

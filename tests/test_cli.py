@@ -51,7 +51,7 @@ def test_run_unreachable_server_exits_2(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "extra",
-    [["--report", "sarif"], ["-o", "probe.json"], ["--env", "A=b", "--http", "http://h"]],
+    [["--sarif-path", "a.py"], ["-o", "probe.json"], ["--env", "A=b", "--http", "http://h"]],
 )
 def test_run_unsupported_options_exit_3(extra: list[str]) -> None:
     args = ["run", *extra] if "--http" in extra else ["run", "--stdio", "x", *extra]

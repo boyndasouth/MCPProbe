@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
@@ -14,6 +14,10 @@ from rich.table import Table
 from mcpprobe import __version__
 from mcpprobe.engine.catalog import CatalogError, Check, Suite, Transport, load_catalog
 from mcpprobe.exit_codes import ExitCode
+
+if TYPE_CHECKING:
+    from mcpprobe.engine.connection import ServerSpec
+    from mcpprobe.engine.runner import RunResult
 
 app = typer.Typer(
     name="mcpprobe",
@@ -127,6 +131,12 @@ def run(
     cases_dir: Annotated[
         Path, typer.Option(help="Where failing cases are saved for replay.")
     ] = Path(".mcpprobe/cases"),
+    sarif_path: Annotated[
+        str | None,
+        typer.Option(
+            help="Repository file SARIF alerts point at (default: the server's entry file)."
+        ),
+    ] = None,
 ) -> None:
     """Probe a server and report findings."""
     if (stdio is None) == (http is None):
@@ -137,20 +147,24 @@ def run(
         raise _fail("--env only applies to --stdio servers", ExitCode.CONFIG_INVALID)
     headers = _parse_headers(header)
     env_vars = _parse_env(env)
-    if baseline is not None and not baseline.is_file():
-        raise _fail(f"baseline not found: {baseline}", ExitCode.CONFIG_INVALID)
-    if report not in (ReportFormat.TERMINAL, ReportFormat.JSON) or baseline is not None:
-        raise _fail(
-            "only terminal and JSON reports exist so far; "
-            "JUnit, SARIF, HTML and --baseline arrive in M4",
-            ExitCode.CONFIG_INVALID,
-        )
+    known: frozenset[str] | None = None
+    if baseline is not None:
+        from mcpprobe.report.baseline import BaselineError, load_baseline
+
+        if not baseline.is_file():
+            raise _fail(f"baseline not found: {baseline}", ExitCode.CONFIG_INVALID)
+        try:
+            known = load_baseline(baseline)
+        except BaselineError as exc:
+            raise _fail(str(exc), ExitCode.CONFIG_INVALID) from exc
+    if sarif_path is not None and report is not ReportFormat.SARIF:
+        raise _fail("--sarif-path only applies to --report sarif", ExitCode.CONFIG_INVALID)
     if output is not None and report is ReportFormat.TERMINAL:
         raise _fail("-o needs a file format, e.g. --report json", ExitCode.CONFIG_INVALID)
     wanted = _parse_suites(suites)
     catalog = _load_catalog_or_exit()
 
-    from mcpprobe.engine.connection import HttpServer, ServerSpec, StdioServer
+    from mcpprobe.engine.connection import HttpServer, StdioServer
     from mcpprobe.engine.runner import Runner, ServerUnavailable
     from mcpprobe.engine.seed import new_seed
     from mcpprobe.report.terminal import render
@@ -185,24 +199,54 @@ def run(
         fuzz_examples=examples,
         concurrency=concurrency,
         startup_timeout=startup_timeout,
+        baseline=known,
     )
     try:
         result = asyncio.run(runner.run(plan))
     except ServerUnavailable as exc:
         raise _fail(str(exc), ExitCode.PROBE_ERROR) from exc
-    if report is ReportFormat.JSON:
-        from mcpprobe.report.json_report import dumps
-
-        text = dumps(result, spec)
+    if report is ReportFormat.TERMINAL:
+        render(result, out, cases_dir=cases_dir)
+    else:
+        text = _format_report(report, result, spec, catalog, cases_dir, sarif_path)
         if output is None:
             typer.echo(text, nl=False)
         else:
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(text, encoding="utf-8")
             render(result, err, cases_dir=cases_dir)
-    else:
-        render(result, out, cases_dir=cases_dir)
     raise typer.Exit(int(result.exit_code))
+
+
+def _format_report(
+    report: ReportFormat,
+    result: RunResult,
+    spec: ServerSpec,
+    catalog: tuple[Check, ...],
+    cases_dir: Path,
+    sarif_path: str | None,
+) -> str:
+    from mcpprobe.engine.connection import StdioServer
+    from mcpprobe.report.common import ReportContext
+
+    if report is ReportFormat.JSON:
+        from mcpprobe.report.json_report import dumps
+
+        return dumps(result, spec)
+    ctx = ReportContext.build(result, catalog, cases_dir.as_posix())
+    if report is ReportFormat.JUNIT:
+        from mcpprobe.report import junit
+
+        return junit.dumps(ctx)
+    if report is ReportFormat.SARIF:
+        from mcpprobe.report import sarif
+
+        argv = spec.argv if isinstance(spec, StdioServer) else None
+        location = sarif_path or sarif.default_location(argv, Path.cwd())
+        return sarif.dumps(ctx, location)
+    from mcpprobe.report import html
+
+    return html.dumps(ctx, spec)
 
 
 def _parse_headers(items: list[str] | None) -> list[tuple[str, str]]:

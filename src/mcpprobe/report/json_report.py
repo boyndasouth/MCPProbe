@@ -2,6 +2,9 @@
 
 Same server + same seed + same MCPProbe version gives byte-identical output:
 no timestamps, no durations, results sorted by case id, keys in fixed order.
+
+Version 1 history (additive changes only, never a renamed or removed key):
+``baseline`` and per-result ``baselined`` were added in 1.0.0.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ def build(result: RunResult, spec: ServerSpec) -> dict[str, Any]:
         "server": _server(spec),
         "era": None if facts is None else facts.era.value,
         "exit_code": int(result.exit_code),
+        "baseline": None if result.baseline is None else {"known_findings": len(result.baseline)},
         "summary": {status.value: result.count(status) for status in Status},
         "restarts": result.restarts,
         "stopped_early": result.stopped_early,
@@ -49,6 +53,9 @@ def build(result: RunResult, spec: ServerSpec) -> dict[str, Any]:
                 "message": r.message,
                 "spec_ref": r.spec_ref,
                 "repro": r.repro,
+                "baselined": result.baseline is not None
+                and r.is_finding
+                and r.case_id in result.baseline,
             }
             for r in sorted(result.results, key=lambda r: r.case_id)
         ],
@@ -56,4 +63,10 @@ def build(result: RunResult, spec: ServerSpec) -> dict[str, Any]:
 
 
 def dumps(result: RunResult, spec: ServerSpec) -> str:
-    return json.dumps(build(result, spec), indent=2, ensure_ascii=False) + "\n"
+    data = build(result, spec)
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:  # a lone surrogate in a message: escape everything
+        text = json.dumps(data, indent=2, ensure_ascii=True) + "\n"
+    return text

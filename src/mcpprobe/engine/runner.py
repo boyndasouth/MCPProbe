@@ -187,12 +187,18 @@ class RunResult:
     restarts: int = 0
     stopped_early: bool = False
     facts: ServerFacts | None = None
+    baseline: frozenset[str] | None = None
+    """Case ids that were already findings in the ``--baseline`` report, if one was given."""
+
+    def is_new(self, result: CaseResult) -> bool:
+        """A finding that the baseline does not know (every finding, without a baseline)."""
+        return result.is_finding and (self.baseline is None or result.case_id not in self.baseline)
 
     @property
     def exit_code(self) -> ExitCode:
         if any(r.status is Status.ERROR for r in self.results):
             return ExitCode.PROBE_ERROR
-        if any(r.is_finding for r in self.results):
+        if any(self.is_new(r) for r in self.results):
             return ExitCode.FAILED
         return ExitCode.PASSED
 
@@ -234,6 +240,8 @@ class Runner:
     allow_open_world: bool = False
     fuzz_examples: int = 50
     concurrency: int = 8
+    baseline: frozenset[str] | None = None
+    """Known findings (case ids) from a previous report; see ``RunResult.baseline``."""
     connect: Callable[[ServerSpec], Connection] = field(default=connect)
     _liveness_counter: int = field(default=0, init=False)
     _facts: ServerFacts = field(default_factory=lambda: ServerFacts(Era.MODERN), init=False)
@@ -295,7 +303,7 @@ class Runner:
     # ------------------------------------------------------------------ runs
 
     async def run(self, plan: Sequence[tuple[Suite, Sequence[Case]]]) -> RunResult:
-        result = RunResult(seed=self.seed)
+        result = RunResult(seed=self.seed, baseline=self.baseline)
         self._facts = await self.preflight()
         result.facts = self._facts
         for suite, cases in plan:
@@ -315,8 +323,9 @@ class Runner:
                 if group:
                     result.results.extend(await self._run_group(suite, mode, group, result))
             if suite is Suite.CONF and not self.keep_going:
+                # Known (baselined) findings do not stop the later suites.
                 result.stopped_early = any(
-                    r.suite is Suite.CONF and r.is_finding for r in result.results
+                    r.suite is Suite.CONF and result.is_new(r) for r in result.results
                 )
         result.results.sort(key=lambda r: r.case_id)
         return result

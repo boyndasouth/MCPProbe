@@ -9,6 +9,7 @@ from rich.markup import escape
 from mcpprobe.engine.catalog import Severity
 from mcpprobe.engine.runner import Status
 from mcpprobe.protocol.era import Era, ServerFacts
+from mcpprobe.report.common import safe_text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -60,9 +61,13 @@ def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
         label = item.status.value
         if item.status is Status.FAILED and item.severity is Severity.INFO:
             style, label = "cyan", "note"  # advice: never fails a run
+        elif item.status is Status.FAILED and item.severity is Severity.WARN:
+            style, label = "yellow", "warning"  # a SHOULD: never fails a run
+        if result.baseline is not None and item.is_finding and item.case_id in result.baseline:
+            style, label = "dim", "known"  # in the --baseline report: does not fail the run
         line = f"[{style}]{label:>8}[/] {escape(item.case_id)} ({item.severity.value})"
         if item.message:
-            line += f": {escape(item.message)}"
+            line += f": {escape(safe_text(item.message))}"
         console.print(line, highlight=False)
         if item.repro:
             console.print(
@@ -75,13 +80,25 @@ def render(result: RunResult, console: Console, *, cases_dir: Path) -> None:
     notes = sum(
         1 for r in result.results if r.status is Status.FAILED and r.severity is Severity.INFO
     )
+    warnings = sum(
+        1 for r in result.results if r.status is Status.FAILED and r.severity is Severity.WARN
+    )
     tallies = {status: result.count(status) for status in Status}
-    tallies[Status.FAILED] -= notes
+    tallies[Status.FAILED] -= notes + warnings
     parts = [f"{count} {status.value}" for status, count in tallies.items() if count]
+    if warnings:
+        parts.append(f"{warnings} warning(s)")
     if notes:
         parts.append(f"{notes} note(s)")
     counts = ", ".join(parts)
     console.print(f"{len(result.results)} cases: {counts}", highlight=False)
+    if result.baseline is not None:
+        known = sum(1 for r in result.results if r.is_finding and r.case_id in result.baseline)
+        new = sum(1 for r in result.results if result.is_new(r))
+        console.print(
+            f"baseline: {new} new finding(s) fail the run; {known} known finding(s) do not",
+            highlight=False,
+        )
     if result.restarts:
         console.print(f"server restarted {result.restarts} time(s)", highlight=False)
     if result.stopped_early:

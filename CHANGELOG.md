@@ -8,6 +8,29 @@ versioned and never silently reused.
 
 ## [Unreleased]
 
+Milestone M4, part 1: reports and baseline mode.
+
+### Added
+- `--report junit`: one test case per case; findings that fail the run are
+  `<failure>`s, warnings and notes are in `<system-out>`.
+- `--report sarif`: SARIF 2.1.0 for GitHub code scanning, with one rule per
+  check (linking its spec section) and fingerprints that are stable across
+  runs. `--sarif-path` picks the repository file alerts point at.
+- `--report html`: a single self-contained page with light and dark themes.
+- `--baseline probe.json`: findings already in an earlier JSON report are
+  shown as known and do not fail the run (or stop later suites); only new
+  ones do. The JSON report gains `baseline` and per-result `baselined`.
+- The determinism tests now cover every report format.
+
+### Changed
+- The package is published as `mcpprobe-cli` (the command and import name
+  stay `mcpprobe`): PyPI rejects "mcpprobe" as too similar to "mcp-probe".
+- The terminal report labels warnings as `warning` instead of `failed`.
+- Dropped the unused `sarif-om` dependency: SARIF is written as plain JSON and
+  tested against the official 2.1.0 schema.
+- Messages containing a lone surrogate (echoed back from fuzzed input) are
+  escaped in every report instead of breaking the file.
+
 ## [0.3.0] - 2026-10-31
 
 Milestone M3: the FUZZ and ROB suites. The M3 gate holds: the same seed gives

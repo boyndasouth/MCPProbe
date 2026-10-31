@@ -18,6 +18,7 @@
     },
     "era": "modern",
     "exit_code": 1,
+    "baseline": null,
     "summary": {
       "passed": 36,
       "failed": 4,
@@ -36,7 +37,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-002/clientCapabilities",
@@ -45,7 +47,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-002/protocolVersion",
@@ -54,7 +57,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-003",
@@ -63,7 +67,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-004",
@@ -72,7 +77,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#result-responses",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-005/echo",
@@ -81,7 +87,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#requests",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-005/null-id",
@@ -90,7 +97,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#requests",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-008",
@@ -99,7 +107,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-009",
@@ -108,7 +117,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-010",
@@ -117,7 +127,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr#server-requirements-basic-workflow",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-011",
@@ -126,7 +137,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#output-schema",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-012",
@@ -135,7 +147,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#capabilities",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-013/handshake",
@@ -144,7 +157,8 @@
         "status": "skipped",
         "message": "server does not speak an initialize-era revision (detected era: modern)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-013/negotiation",
@@ -153,7 +167,8 @@
         "status": "skipped",
         "message": "server does not speak an initialize-era revision (detected era: modern)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#initialization",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-014",
@@ -162,7 +177,8 @@
         "status": "skipped",
         "message": "supportedVersions lists no initialize-era revision",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/discover#discoverresult",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-015",
@@ -171,7 +187,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio#stdio",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-016",
@@ -180,7 +197,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/deprecated#deprecated",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-017",
@@ -189,7 +207,8 @@
         "status": "failed",
         "message": "server/discover result has no _meta io.modelcontextprotocol/serverInfo",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta",
-        "repro": "CONF-017.json"
+        "repro": "CONF-017.json",
+        "baselined": false
       },
       {
         "id": "CONF-018",
@@ -198,7 +217,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching#cacheable-results",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-020",
@@ -207,7 +227,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#statelessness",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-021",
@@ -216,7 +237,8 @@
         "status": "skipped",
         "message": "server does not speak an initialize-era revision (detected era: modern)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#version-negotiation",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "CONF-022",
@@ -225,7 +247,8 @@
         "status": "skipped",
         "message": "server does not speak an initialize-era revision (detected era: modern)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle#version-negotiation",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-001/ask_name",
@@ -234,7 +257,8 @@
         "status": "passed",
         "message": "50 calls (50 with valid arguments, 0 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-001/delete_everything",
@@ -243,7 +267,8 @@
         "status": "skipped",
         "message": "tool may be destructive (pass --allow-destructive to include it)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-001/echo",
@@ -252,7 +277,8 @@
         "status": "crashed",
         "message": "server stopped responding after this case (failed: tools/call echo with {\"message\": \"\\u0080\"}: the server crashed or closed the connection)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
-        "repro": "FUZZ-001_echo.json"
+        "repro": "FUZZ-001_echo.json",
+        "baselined": false
       },
       {
         "id": "FUZZ-001/get_time",
@@ -261,7 +287,8 @@
         "status": "passed",
         "message": "35 calls (1 with valid arguments, 34 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-001/weather",
@@ -270,7 +297,8 @@
         "status": "passed",
         "message": "50 calls (4 with valid arguments, 46 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-002/ask_name",
@@ -279,7 +307,8 @@
         "status": "passed",
         "message": "50 calls (50 with valid arguments, 0 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-002/delete_everything",
@@ -288,7 +317,8 @@
         "status": "skipped",
         "message": "tool may be destructive (pass --allow-destructive to include it)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-002/echo",
@@ -297,7 +327,8 @@
         "status": "passed",
         "message": "5 calls (3 with valid arguments, 2 invalid); stopped early at the FUZZ-001 finding, so later inputs went untested",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-002/get_time",
@@ -306,7 +337,8 @@
         "status": "passed",
         "message": "35 calls (1 with valid arguments, 34 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-002/weather",
@@ -315,7 +347,8 @@
         "status": "passed",
         "message": "50 calls (4 with valid arguments, 46 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-003/ask_name",
@@ -324,7 +357,8 @@
         "status": "passed",
         "message": "50 calls (50 with valid arguments, 0 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-003/delete_everything",
@@ -333,7 +367,8 @@
         "status": "skipped",
         "message": "tool may be destructive (pass --allow-destructive to include it)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-003/echo",
@@ -342,7 +377,8 @@
         "status": "passed",
         "message": "5 calls (3 with valid arguments, 2 invalid); stopped early at the FUZZ-001 finding, so later inputs went untested",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-003/get_time",
@@ -351,7 +387,8 @@
         "status": "passed",
         "message": "35 calls (1 with valid arguments, 34 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-003/weather",
@@ -360,7 +397,8 @@
         "status": "passed",
         "message": "50 calls (4 with valid arguments, 46 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-004/ask_name",
@@ -369,7 +407,8 @@
         "status": "passed",
         "message": "50 calls (50 with valid arguments, 0 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-004/delete_everything",
@@ -378,7 +417,8 @@
         "status": "skipped",
         "message": "tool may be destructive (pass --allow-destructive to include it)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-004/echo",
@@ -387,7 +427,8 @@
         "status": "failed",
         "message": "schema-valid arguments got JSON-RPC error -32602 (message must not be empty): tools/call echo with {\"message\": \"\"}",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
-        "repro": "FUZZ-004_echo.json"
+        "repro": "FUZZ-004_echo.json",
+        "baselined": false
       },
       {
         "id": "FUZZ-004/get_time",
@@ -396,7 +437,8 @@
         "status": "passed",
         "message": "35 calls (1 with valid arguments, 34 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "FUZZ-004/weather",
@@ -405,7 +447,8 @@
         "status": "passed",
         "message": "50 calls (4 with valid arguments, 46 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "ROB-001",
@@ -414,7 +457,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "ROB-002",
@@ -423,7 +467,8 @@
         "status": "failed",
         "message": "a request without \"jsonrpc\" got a result (and 1 more of 4); expected an error (-32600 Invalid Request)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#requests",
-        "repro": "ROB-002.json"
+        "repro": "ROB-002.json",
+        "baselined": false
       },
       {
         "id": "ROB-003",
@@ -432,7 +477,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#protocol-version-header",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "ROB-004",
@@ -441,7 +487,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "ROB-005/10mb",
@@ -450,7 +497,8 @@
         "status": "failed",
         "message": "a 10,000,000-byte tools/list request got no JSON-RPC response; it should be answered, or rejected with an error (HTTP 413 is fine)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
-        "repro": "ROB-005_10mb.json"
+        "repro": "ROB-005_10mb.json",
+        "baselined": false
       },
       {
         "id": "ROB-005/1mb",
@@ -459,7 +507,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "ROB-006/stdio",
@@ -468,7 +517,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation#timing-considerations",
-        "repro": null
+        "repro": null,
+        "baselined": false
       },
       {
         "id": "ROB-007",
@@ -477,7 +527,8 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#responses",
-        "repro": null
+        "repro": null,
+        "baselined": false
       }
     ]
   }
