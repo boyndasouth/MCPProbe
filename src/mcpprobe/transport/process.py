@@ -2,9 +2,8 @@
 
 Servers are often launched through wrappers (``npx``, ``uvx``, shell
 scripts), so killing only the direct child leaves the real server running.
-On POSIX the server gets its own process group. On Windows it joins a Job
-Object (see ``winjob.py``) that kills the whole tree, with ``taskkill /T`` as
-a fallback.
+On POSIX the server gets its own process group. On Windows a Job Object
+plus a process-tree snapshot take the whole tree down (see ``winjob.py``).
 """
 
 from __future__ import annotations
@@ -67,11 +66,10 @@ def terminate_tree(
     """
     # sys.platform, not IS_WINDOWS: mypy narrows only on the literal check.
     if sys.platform == "win32":  # pragma: no cover - Windows only
-        # The job reaches orphans whose wrapper already exited; taskkill /T
-        # covers the case where no job could be created.
+        # The job snapshots the tree first, then kills the job and every
+        # descendant, including ones that escaped it (see winjob.py).
         if job is not None:
             job.terminate()
-        if process.returncode is not None:
             return
         subprocess.run(
             ["taskkill", "/T", "/F", "/PID", str(process.pid)],

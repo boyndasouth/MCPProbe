@@ -33,9 +33,12 @@ public MCP servers (14 configurations, stdio and HTTP).
 - CI type-checks Windows-only and macOS code paths too.
 
 ### Fixed
-- Windows: servers started through a wrapper that exits early (`npx.cmd`,
-  `uvx`) left their real server process running after MCPProbe finished. Each
-  server now runs inside a Job Object that is killed as a whole.
+- Windows: servers started through a wrapper (`npx.cmd`, `uvx`, a venv's
+  `python.exe`) could leave their real server process running after MCPProbe
+  finished. MCPProbe now tracks the server's process tree while it runs and
+  ends every process it saw, on top of a kill-on-close Job Object. Tracking
+  catches processes Windows moves out of the job (such as the Microsoft Store
+  Python) and children whose parent in the middle of the chain already exited.
 
 ### Changed
 - CONF-002 accepts any error for a request missing `protocolVersion` on a

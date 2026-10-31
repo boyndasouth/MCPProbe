@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import time
@@ -187,3 +188,95 @@ def test_split_command_and_resolve() -> None:
     assert resolve_argv(["./not-on-path"]) == ["./not-on-path"]
     with pytest.raises(ValueError, match="empty"):
         resolve_argv([])
+
+
+def test_grow_tree_follows_children_and_rejects_impostors() -> None:
+    from mcpprobe.transport.winjob import grow_tree
+
+    # 10 is the server (started at t=100). 11 and 12 are its children; 13 is a
+    # grandchild under 11. 14 names 12 as parent but started before 12 did, so
+    # it is some older process: not a descendant. 99 is MCPProbe itself and is
+    # never included. 15 cannot be read.
+    children = {10: [11, 12, 99], 11: [13], 12: [14], 13: [15]}
+    started = {10: 100, 11: 110, 12: 120, 13: 130, 14: 50, 99: 105}
+
+    found = grow_tree(children, started.get, {10: 100}, exclude=99)
+    assert found == {10: 100, 11: 110, 12: 120, 13: 130}
+
+
+def test_grow_tree_reaches_children_of_exited_middle_processes() -> None:
+    """The Store-Python case: the middle of the chain exits first.
+
+    Seen earlier: server 10 -> launcher 11. Now 11 has exited (it can no longer
+    be read), but its child 12 still names it as parent and must be found.
+    """
+    from mcpprobe.transport.winjob import grow_tree, still_running
+
+    known = {10: 100, 11: 110}
+    children = {11: [12]}  # 11 itself is gone from the process table
+    started = {10: 100, 12: 120}
+    found = grow_tree(children, started.get, known, exclude=0)
+    assert found == {10: 100, 11: 110, 12: 120}
+    assert sorted(still_running(started.get, found)) == [10, 12]
+
+
+def test_grow_tree_ignores_children_of_a_recycled_pid() -> None:
+    # 11 was ours (born 110) and exited; Windows gave PID 11 to an unrelated
+    # process born at 500. Its child 13 (born 510) is not ours. Our old child
+    # 12 (born 120, before the impostor) still is.
+    from mcpprobe.transport.winjob import grow_tree, still_running
+
+    children = {11: [12, 13]}
+    started = {11: 500, 12: 120, 13: 510}
+    found = grow_tree(children, started.get, {11: 110}, exclude=0)
+    assert found == {11: 110, 12: 120}
+    # ...and the impostor now holding PID 11 is never killed.
+    assert still_running(started.get, found) == [12]
+
+
+def test_grow_tree_survives_cycles() -> None:
+    from mcpprobe.transport.winjob import grow_tree
+
+    children = {1: [2], 2: [3], 3: [2, 1]}
+    started = {1: 10, 2: 20, 3: 30}
+    assert grow_tree(children, started.get, {1: 10}, exclude=0) == {1: 10, 2: 20, 3: 30}
+    assert grow_tree({}, started.get, {1: 10}, exclude=0) == {1: 10}
+
+
+async def test_tree_tracker_runs_while_server_lives(
+    stdio_argv: list[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Windows tracker's lifecycle, with a fake job: it refreshes repeatedly
+    while the server runs, the final terminate happens, then it stops."""
+    from mcpprobe.transport import stdio as stdio_module
+    from mcpprobe.transport.winjob import ProcessJob
+
+    events: list[str] = []
+
+    class FakeJob(ProcessJob):
+        tracks = True
+
+        def refresh(self) -> None:
+            events.append("refresh")
+
+        def terminate(self) -> None:
+            events.append("terminate")
+
+    from types import SimpleNamespace
+
+    from mcpprobe.transport import process as process_module
+
+    monkeypatch.setattr(stdio_module, "new_job", FakeJob)
+    # Route terminate_tree down its Windows branch (job.terminate) without
+    # pretending the whole interpreter is on Windows. The server still exits
+    # on its own when its stdin closes.
+    monkeypatch.setattr(process_module, "sys", SimpleNamespace(platform="win32"))
+    transport = StdioTransport(stdio_argv, recorder=Recorder())
+    await transport.start()
+    await asyncio.sleep(0.3)
+    await transport.close(grace=1)
+    refreshes_at_close = events.count("refresh")
+    assert refreshes_at_close >= 3
+    assert "terminate" in events
+    await asyncio.sleep(0.3)
+    assert events.count("refresh") == refreshes_at_close  # stopped for good

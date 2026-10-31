@@ -66,6 +66,7 @@ class StdioTransport:
         self._stdout_done = False
         self._count_changed = asyncio.Condition()
         self._job: ProcessJob = new_job()
+        self._tracker: asyncio.Task[None] | None = None
         self.stderr_tail: deque[str] = deque(maxlen=STDERR_TAIL)
         """Last stderr lines, for error messages when the server dies."""
 
@@ -86,12 +87,25 @@ class StdioTransport:
         except (OSError, ValueError) as exc:
             raise ServerStartError(f"could not start {self.argv[0]!r}: {exc}") from exc
         self._job.assign(self._process.pid)
+        if self._job.tracks:  # pragma: no cover - Windows only
+            self._tracker = asyncio.create_task(self._track_tree())
         assert self._process.stdout is not None
         assert self._process.stderr is not None
         self._readers = [
             asyncio.create_task(self._read_stdout(self._process.stdout)),
             asyncio.create_task(self._read_stderr(self._process.stderr)),
         ]
+
+    async def _track_tree(self) -> None:  # pragma: no cover - Windows only
+        """Keep the job's picture of the process tree current while the server runs.
+
+        Often at first, while wrappers start the real server, then twice a second.
+        """
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        while True:
+            await asyncio.to_thread(self._job.refresh)
+            await asyncio.sleep(0.05 if loop.time() - start < 3 else 0.5)
 
     async def close(self, grace: float = 2.0) -> int | None:
         """Shut the server down; returns its exit code. Safe to call twice."""
@@ -114,6 +128,10 @@ class StdioTransport:
             # Kill the whole tree even if we were cancelled (Ctrl+C) half-way
             # through, or the direct child exited but left descendants behind.
             terminate_tree(process, force=True, job=self._job)
+            if self._tracker is not None:  # pragma: no cover - Windows only
+                self._tracker.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._tracker
             self._job.close()
             await self._stop_readers(grace)
         return process.returncode
