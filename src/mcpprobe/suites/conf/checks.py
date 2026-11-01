@@ -9,6 +9,7 @@ spec allows more than one answer, every allowed answer passes.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from jsonschema.exceptions import SchemaError
@@ -164,20 +165,48 @@ def _ordinary_method(ctx: CaseContext) -> str:
 
 
 async def conf_003(ctx: CaseContext) -> Outcome:
+    """The unsupported version is the first request a fresh process sees (stdio).
+
+    On the shared connection, earlier valid requests could make a server that
+    remembers the version accept 1900-01-01; that is CONF-020's finding, and
+    blaming it on version checking would be wrong. Over HTTP the probe cannot
+    restart the server, so the shared connection is used.
+    """
+    if isinstance(ctx.connection, StdioConnection) and ctx.open_fresh is not None:
+        fresh = await ctx.open_fresh()
+        ctx = replace(ctx, connection=fresh, timeout=max(ctx.timeout, ctx.startup_timeout))
     return await _unsupported_version(ctx, _ordinary_method(ctx), "conf-003")
 
 
 async def conf_020(ctx: CaseContext) -> Outcome:
-    """A valid request first, so a server that keeps version state is caught."""
+    """Unsupported, valid, unsupported again, on a brand-new server process.
+
+    The first request is the control: a server that accepts 1900-01-01 before
+    it has seen anything else never checks the version at all. That is
+    CONF-003's finding, so this case skips instead of reporting it twice. Only
+    a server that refuses the version at first and accepts it after a valid
+    request is remembering state between requests.
+    """
+    assert ctx.open_fresh is not None
+    fresh = await ctx.open_fresh()
     method = _ordinary_method(ctx)
-    first = await modern_call(ctx, method, "conf-020-valid")
+    probe = replace(ctx, connection=fresh, timeout=max(ctx.timeout, ctx.startup_timeout))
+    control = await _unsupported_version(probe, method, "conf-020-control")
+    if control.status is Status.FAILED:
+        return Outcome.skipped(
+            f"the server accepts version 1900-01-01 even as the first request, so it does not "
+            f"check versions at all; see CONF-003 ({control.message})"
+        )
+    probe = replace(probe, timeout=ctx.timeout)
+    first = await modern_call(probe, method, "conf-020-valid")
     if first.response is None:
         return Outcome.skipped(f"{method} did not answer a valid request")
-    outcome = await _unsupported_version(ctx, method, "conf-020-unsupported")
+    outcome = await _unsupported_version(probe, method, "conf-020-unsupported")
     if outcome.status is Status.FAILED:
         return Outcome.failed(
-            f"after a valid {VERSION} request, {outcome.message}; the server appears to keep "
-            "the protocol version from earlier requests"
+            f"version 1900-01-01 was refused as the first request, but after a valid {VERSION} "
+            f"request {outcome.message}; the server keeps the protocol version from earlier "
+            "requests"
         )
     return outcome
 
@@ -723,7 +752,10 @@ CASES: list[CaseSpec] = [
     ("CONF-016", "", conf_016, BOTH),
     ("CONF-017", "", conf_017, BOTH),
     ("CONF-018", "", conf_018, BOTH),
-    ("CONF-020", "", conf_020, BOTH),
+    # stdio only: over HTTP the probe cannot restart the server, so it cannot
+    # send a first request to a server that has seen nothing; CONF-003 covers
+    # any HTTP server that accepts an unsupported version.
+    ("CONF-020", "", conf_020, STDIO),
     ("CONF-008", "", conf_008, BOTH),
     ("CONF-009", "", conf_009, BOTH),
     ("CONF-010", "", conf_010, BOTH),
@@ -736,7 +768,13 @@ CASES: list[CaseSpec] = [
 ]
 
 # Cases that open their own connections: each one may pay a server start-up.
-FRESH_SESSIONS = {"CONF-013": 1, "CONF-014": len(legacy.VERSIONS), "CONF-021": 1}
+FRESH_SESSIONS = {
+    "CONF-003": 1,
+    "CONF-013": 1,
+    "CONF-020": 1,
+    "CONF-014": len(legacy.VERSIONS),
+    "CONF-021": 1,
+}
 
 # Cases that call every safe tool get this multiple of the per-case timeout.
 TIMEOUT_FACTORS = {"CONF-009": 6.0, "CONF-010": 6.0, "CONF-011": 6.0}

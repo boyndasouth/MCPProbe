@@ -6,6 +6,6 @@
 |---|---|---|
 | error | modern era, stdio, http | [2026-07-28/basic/versioning#protocol-version-negotiation](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation) |
 
-Sends an ordinary request (tools/list, prompts/list or resources/list, whichever the server declares; server/discover if none) declaring protocol version 1900-01-01. The server MUST answer with UnsupportedProtocolVersionError (-32022) whose data lists the supported versions and echoes the requested one; on HTTP with status 400. Earlier cases may have sent valid requests on the same connection; a server that keeps version state between requests is also caught, more directly, by CONF-020.
+Sends an ordinary request (tools/list, prompts/list or resources/list, whichever the server declares; server/discover if none) declaring protocol version 1900-01-01. The server MUST answer with UnsupportedProtocolVersionError (-32022) whose data lists the supported versions and echoes the requested one; on HTTP with status 400. On stdio the request is the first one a fresh server process receives, so a server that only goes wrong after earlier requests is reported by CONF-020 instead. Over HTTP the probe cannot restart the server, and earlier cases may have sent valid requests.
 
 From the command line: `mcpprobe checks explain CONF-003`. To leave it out of a run, add `"CONF-003"` to `[checks] disable` in [mcpprobe.toml](../configuration.md); to change how much it counts, use `severity_overrides`.

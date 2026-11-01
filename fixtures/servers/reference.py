@@ -147,9 +147,16 @@ class Rpc(Exception):
 
 class Server:
     def __init__(
-        self, breaks: set[str], era: str = "modern", require_token: str | None = None
+        self,
+        breaks: set[str],
+        era: str = "modern",
+        require_token: str | None = None,
+        *,
+        ignore_version: bool = False,
     ) -> None:
         self.breaks = breaks
+        self.ignore_version = ignore_version
+        """Accept any protocol version, the way a server that never checks it does."""
         self.era = era
         self.require_token = require_token
         """HTTP only: requests must carry ``Authorization: Bearer <token>``."""
@@ -200,6 +207,8 @@ class Server:
                 if key not in meta:
                     raise Rpc(-32602, f"missing required _meta field {key}")
         version = meta.get(PV, VERSION)
+        if self.ignore_version:
+            return
         if "CONF-020" in self.breaks:
             with self.lock:
                 if self.remembered_version is None and version in SUPPORTED:
@@ -678,8 +687,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--require-token", metavar="TOKEN", help="HTTP: require Authorization: Bearer TOKEN"
     )
+    parser.add_argument(
+        "--ignore-version",
+        action="store_true",
+        help="accept any protocol version (breaks CONF-003; CONF-020 must skip, not fail)",
+    )
     args = parser.parse_args(argv)
-    server = Server(set(args.breaks), args.era, args.require_token)
+    server = Server(
+        set(args.breaks), args.era, args.require_token, ignore_version=args.ignore_version
+    )
     if args.http is None:
         serve_stdio(server)
         return

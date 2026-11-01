@@ -22,7 +22,7 @@ from mcpprobe.protocol.era import Era
 from mcpprobe.report.json_report import dumps
 from mcpprobe.suites import SuiteOptions, collect
 from mcpprobe.suites.conf.checks import CASES
-from tests.support.reference import reference, stdio_spec
+from tests.support.reference import REFERENCE, reference, stdio_spec
 
 if TYPE_CHECKING:
     from mcpprobe.engine.connection import ServerSpec
@@ -227,3 +227,31 @@ async def test_unknown_capabilities_are_reported_honestly(tmp_path: Path) -> Non
         outcome = await check(ctx)
         assert outcome.status is Status.SKIPPED
         assert "did not return" in outcome.message
+
+
+async def test_server_that_never_checks_versions_is_reported_once(tmp_path: Path) -> None:
+    # server-everything 2.1.0 behaves like this: any protocol version is
+    # accepted. CONF-003 reports it; CONF-020 must not report it again as
+    # "remembered state", which it is not.
+    spec = StdioServer((sys.executable, "-u", str(REFERENCE), "--ignore-version"))
+    result = await run_checks(spec, Transport.STDIO, tmp_path)
+    by_id = {r.case_id: r for r in result.results}
+    assert by_id["CONF-003"].status is Status.FAILED
+    assert by_id["CONF-020"].status is Status.SKIPPED
+    assert "see CONF-003" in by_id["CONF-020"].message
+
+
+async def test_remembered_version_fails_conf_020_with_the_right_reason(tmp_path: Path) -> None:
+    result = await run_checks(stdio_spec(("CONF-020",)), Transport.STDIO, tmp_path, "CONF-020")
+    (case,) = result.results
+    assert case.status is Status.FAILED
+    assert "keeps the protocol version from earlier requests" in case.message
+
+
+async def test_remembered_version_is_not_blamed_on_version_checking(tmp_path: Path) -> None:
+    # A server that checks the version on a fresh process but remembers it
+    # afterwards (server-everything 2.1.0) is CONF-020's finding only.
+    result = await run_checks(stdio_spec(("CONF-020",)), Transport.STDIO, tmp_path)
+    by_id = {r.case_id: r.status for r in result.results}
+    assert by_id["CONF-003"] is Status.PASSED
+    assert by_id["CONF-020"] is Status.FAILED

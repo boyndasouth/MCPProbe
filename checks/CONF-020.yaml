@@ -3,7 +3,12 @@ title: Protocol version is read from each request, not remembered
 severity: error
 era: modern
 spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#statelessness
-description: Sends a valid 2026-07-28 request, then the same request declaring version 1900-01-01
-  on the same connection. Servers MUST NOT rely on prior requests over the same connection
-  to establish context such as the protocol version, so the second request MUST still get
-  UnsupportedProtocolVersionError (-32022).
+transports:
+- stdio
+description: Starts a fresh server process and sends a request declaring version 1900-01-01,
+  then a valid 2026-07-28 request, then the 1900-01-01 request again. Servers MUST NOT rely
+  on prior requests over the same connection to establish context such as the protocol
+  version, so the last request MUST still get UnsupportedProtocolVersionError (-32022). If the
+  very first request is already accepted, the server does not check versions at all; that is
+  reported by CONF-003, and this check is skipped. stdio only, because the probe cannot restart
+  an HTTP server to get a first request.

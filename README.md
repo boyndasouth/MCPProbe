@@ -162,7 +162,7 @@ flags a deprecated feature; `info` is advice and shows as a note.
 | CONF-016 | warn | modern | Deprecated logging capability is declared |
 | CONF-017 | warn | modern | Results identify the server in `_meta` serverInfo |
 | CONF-018 | error | modern | Cacheable results carry `ttlMs` and `cacheScope` |
-| CONF-020 | error | modern | Protocol version is read from each request, not remembered |
+| CONF-020 | error | modern, stdio | Protocol version is read from each request, not remembered |
 | FUZZ-001 | error | both | Fuzzed tool arguments never crash the server or go unanswered |
 | FUZZ-002 | error | both | Invalid tool arguments are rejected cleanly, not with an internal error |
 | FUZZ-003 | warn | both | Invalid tool arguments are not accepted as a success |

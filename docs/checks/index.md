@@ -26,7 +26,7 @@ Every check cites the section of the MCP specification it enforces. `error` chec
 | [CONF-016](CONF-016.md) | warn | modern era, stdio, http | Deprecated logging capability is declared |
 | [CONF-017](CONF-017.md) | warn | modern era, stdio, http | Results identify the server in _meta serverInfo |
 | [CONF-018](CONF-018.md) | error | modern era, stdio, http | Cacheable results carry ttlMs and cacheScope |
-| [CONF-020](CONF-020.md) | error | modern era, stdio, http | Protocol version is read from each request, not remembered |
+| [CONF-020](CONF-020.md) | error | modern era, stdio | Protocol version is read from each request, not remembered |
 | [CONF-021](CONF-021.md) | warn | legacy era, stdio, http | initialize answers an unsupported version with a supported one |
 | [CONF-022](CONF-022.md) | info | legacy era, stdio, http | Server negotiates an outdated initialize-era revision |
 

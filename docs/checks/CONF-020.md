@@ -4,8 +4,8 @@
 
 | Severity | Applies to | Spec section |
 |---|---|---|
-| error | modern era, stdio, http | [2026-07-28/basic/index#statelessness](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#statelessness) |
+| error | modern era, stdio | [2026-07-28/basic/index#statelessness](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#statelessness) |
 
-Sends a valid 2026-07-28 request, then the same request declaring version 1900-01-01 on the same connection. Servers MUST NOT rely on prior requests over the same connection to establish context such as the protocol version, so the second request MUST still get UnsupportedProtocolVersionError (-32022).
+Starts a fresh server process and sends a request declaring version 1900-01-01, then a valid 2026-07-28 request, then the 1900-01-01 request again. Servers MUST NOT rely on prior requests over the same connection to establish context such as the protocol version, so the last request MUST still get UnsupportedProtocolVersionError (-32022). If the very first request is already accepted, the server does not check versions at all; that is reported by CONF-003, and this check is skipped. stdio only, because the probe cannot restart an HTTP server to get a first request.
 
 From the command line: `mcpprobe checks explain CONF-020`. To leave it out of a run, add `"CONF-020"` to `[checks] disable` in [mcpprobe.toml](../configuration.md); to change how much it counts, use `severity_overrides`.

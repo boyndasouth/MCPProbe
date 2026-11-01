@@ -47,6 +47,10 @@ Milestone M4: reports, baseline mode and the SEC suite.
   build-provenance attestations on PyPI and GitHub.
 
 ### Changed
+- CONF-003 and CONF-020 run their first request on a fresh server process
+  (stdio), so a server that remembers the protocol version between requests is
+  reported once, by CONF-020, and a server that never checks it once, by
+  CONF-003. CONF-020 is now stdio only.
 - The package is published as `mcpprobe-kit` (the command and import name
   stay `mcpprobe`): PyPI rejects "mcpprobe" and "mcpprobe-cli" as too similar
   to the existing "mcp-probe" and "mcp-probe-cli".
