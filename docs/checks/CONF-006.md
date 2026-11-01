@@ -6,6 +6,6 @@
 |---|---|---|
 | error | modern era, http | [2026-07-28/basic/transports/streamable-http#server-validation](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#server-validation) |
 
-Sends server/discover three times: with an Mcp-Method header naming another method, with an MCP-Protocol-Version header that differs from the body, and without Mcp-Method. Each MUST be rejected with HTTP 400 and HeaderMismatch (-32020).
+Sends server/discover three times: with an Mcp-Method header naming another method, with an MCP-Protocol-Version header that differs from the body, and without Mcp-Method. Each MUST be rejected with HTTP 400 and HeaderMismatch (-32020). The mismatched header names 2025-11-25, a legacy revision; a dual-era server may route such a request to its legacy handling, so for dual-era servers any HTTP 400 passes that case.
 
 From the command line: `mcpprobe checks explain CONF-006`. To leave it out of a run, add `"CONF-006"` to `[checks] disable` in [mcpprobe.toml](../configuration.md); to change how much it counts, use `severity_overrides`.

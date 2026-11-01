@@ -153,9 +153,13 @@ class Server:
         require_token: str | None = None,
         *,
         ignore_version: bool = False,
+        route_by_header: bool = False,
     ) -> None:
         self.breaks = breaks
         self.ignore_version = ignore_version
+        self.route_by_header = route_by_header
+        """HTTP, dual era: a legacy MCP-Protocol-Version header picks legacy handling,
+        so a request without a session is refused, the way excel-mcp-server 2.2.6 does."""
         """Accept any protocol version, the way a server that never checks it does."""
         self.era = era
         self.require_token = require_token
@@ -642,6 +646,14 @@ def make_http_server(server: Server, port: int = 0) -> ThreadingHTTPServer:
                 and not _origin_allowed(origin)
             ):
                 self._send(403, _error(None, Rpc(-32600, "Forbidden origin")))
+                return
+            if (
+                server.route_by_header
+                and self.headers.get("MCP-Protocol-Version") in LEGACY_SUPPORTED
+                and self.headers.get(SESSION_HEADER) is None
+                and b'"initialize"' not in raw
+            ):
+                self._send(400, _error(None, Rpc(-32600, "Bad Request: Missing session ID")))
                 return
             mismatch = _header_mismatch(server, self.headers, raw)
             if mismatch is not None:

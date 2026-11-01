@@ -8,6 +8,7 @@ former and fail the latter on every transport it applies to.
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -255,3 +256,23 @@ async def test_remembered_version_is_not_blamed_on_version_checking(tmp_path: Pa
     by_id = {r.case_id: r.status for r in result.results}
     assert by_id["CONF-003"] is Status.PASSED
     assert by_id["CONF-020"] is Status.FAILED
+
+
+async def test_conf_006_dual_era_server_may_route_by_legacy_header(tmp_path: Path) -> None:
+    # excel-mcp-server 2.2.6 reads MCP-Protocol-Version: 2025-11-25 as a legacy
+    # request and refuses it for lacking a session. Refused is what matters.
+    from tests.support.reference import reference as ref
+
+    httpd = ref.make_http_server(ref.Server(set(), "dual", route_by_header=True))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{httpd.server_address[1]}/mcp"
+        result = await run_checks(HttpServer(url), Transport.HTTP, tmp_path, "CONF-006")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert {r.case_id: r.status for r in result.results} == {
+        "CONF-006/method": Status.PASSED,
+        "CONF-006/version": Status.PASSED,
+        "CONF-006/missing": Status.PASSED,
+    }

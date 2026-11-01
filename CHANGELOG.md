@@ -47,6 +47,11 @@ Milestone M4: reports, baseline mode and the SEC suite.
   build-provenance attestations on PyPI and GitHub.
 
 ### Changed
+- CONF-006: a dual-era server may refuse a request whose MCP-Protocol-Version
+  header names a legacy revision with any HTTP 400 (it may treat the request
+  as legacy); modern-only servers still need -32020.
+- A server that exits during start-up is reported as "server exited with code
+  N at start-up" with its stderr, instead of "did not answer within 5s".
 - CONF-003 and CONF-020 run their first request on a fresh server process
   (stdio), so a server that remembers the protocol version between requests is
   reported once, by CONF-020, and a server that never checks it once, by

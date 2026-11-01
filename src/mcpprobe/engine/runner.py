@@ -294,10 +294,13 @@ class Runner:
                     "--header 'Authorization: Bearer <token>' (or the header your server expects)"
                 )
             if not await self.alive(connection):
-                detail = ""
-                stderr = getattr(getattr(connection, "stdio", None), "stderr_tail", None)
-                if stderr:
-                    detail = f"; stderr: {' | '.join(stderr)}"
+                stdio = getattr(connection, "stdio", None)
+                stderr = getattr(stdio, "stderr_tail", None)
+                detail = f"; stderr: {' | '.join(stderr)}" if stderr else ""
+                code = getattr(stdio, "returncode", None)
+                if code is not None:
+                    # It did not stop answering; it was never running.
+                    raise ServerUnavailable(f"server exited with code {code} at start-up{detail}")
                 raise ServerUnavailable(
                     f"server did not answer a {LIVENESS_METHOD} probe within "
                     f"{self.liveness_timeout:g}s{detail}"

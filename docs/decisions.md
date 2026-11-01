@@ -52,6 +52,7 @@ total timeout, GitHub Action, docs site, PyPI publishing; before the M4 gate).
 | D36 | (not in the spec) | The Action installs MCPProbe from its own checkout (`uv tool run --from <action path>`), not from PyPI | `@v1` then always runs v1's code, and the Action works before and without PyPI | Review |
 | D37 | Docs site (no tool named) | MkDocs with Material, built with `--strict` and published to GitHub Pages | Material reaches end of life on 2027-05-05; its successor, Zensical, reads the same `mkdocs.yml`, so moving is a small change before then | Review |
 | D38 | CONF-003: unsupported version returns -32022 (no transport or ordering given) | On stdio, CONF-003 and CONF-020 each start a fresh server process and send 1900-01-01 as its first request; CONF-020 then sends a valid request and 1900-01-01 again, and runs on stdio only | server-everything 2.1.0 refuses 1900-01-01 correctly on a fresh process but accepts it after one valid request. On the shared connection both checks failed, and CONF-003 blamed version checking for what is remembered state. Now each bug is reported once, by the check that names it. Costs two extra server starts per run | Review |
+| D39 | CONF-006: a header that disagrees with the body gets HTTP 400 + -32020 | For dual-era servers, the MCP-Protocol-Version case passes with any HTTP 400; modern-only servers still need -32020 | The mismatched header names 2025-11-25, a legacy revision. excel-mcp-server 2.2.6 routes such a request to its legacy handling and refuses it for lacking a session. The spec does not say which era a dual-era server must pick when header and body disagree; the request is refused either way. A server that does not check headers at all still fails | Approved (2026-11-01) |
 | D9 | `mcpprobe replay .mcpprobe/cases/FUZZ-003-7f2a.json` (hash in the name) | Cases are saved as `<case id>.json` (`FUZZ-003_echo.json`) | Names derived only from the case id keep runs byte-identical | Review |
 
 ## Conformance (CONF)
@@ -114,7 +115,7 @@ total timeout, GitHub Action, docs site, PyPI publishing; before the M4 gate).
 | O3 | "Per-request and total timeouts" | **Built in M4 batch 3** (see D35) |
 | O4 | Pydantic message models generated from the official JSON Schema per revision | Requests are built by hand in `protocol/` on purpose (the raw wire client must be able to send malformed messages); there are no generated models. Decide whether they are still wanted |
 | O5 | GitHub Action, docs site, PyPI via trusted publishing, signed releases | **Built in M4 batch 3**; needs one-time setup on pypi.org and in the repository settings before the first release |
-| O6 | Run on 10+ public servers, review every finding by hand, no known false positives | M4 gate |
+| O6 | Run on 10+ public servers, review every finding by hand, no known false positives | **Passed 2026-11-01**: 12 servers, 14 targets; see gate-m4.md |
 | O7 | EVAL suite | M5 (v1.1) |
 
 

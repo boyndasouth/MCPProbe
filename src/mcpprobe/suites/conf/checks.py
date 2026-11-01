@@ -300,6 +300,11 @@ def conf_006(variant: str) -> Callable[[CaseContext], Awaitable[Outcome]]:
             del headers["Mcp-Method"]
         sent = [("Content-Type", "application/json"), ("Accept", ACCEPT), *headers.items()]
         response, status = await http_post(ctx, body, sent)
+        if variant == "version" and ctx.facts.era is Era.DUAL and status == 400:
+            # The header names a legacy revision. The spec does not say whether a
+            # dual-era server must pick the era from the body or may route by the
+            # header; either way the request is refused, which is what matters.
+            return Outcome.passed()
         if status != 400 or error_code(response) != HEADER_MISMATCH:
             return Outcome.failed(
                 f"{_variant_text(variant)} got {describe(response, status)}, expected HTTP 400 "

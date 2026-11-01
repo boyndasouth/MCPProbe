@@ -7,4 +7,6 @@ transports:
 - http
 description: 'Sends server/discover three times: with an Mcp-Method header naming another
   method, with an MCP-Protocol-Version header that differs from the body, and without Mcp-Method.
-  Each MUST be rejected with HTTP 400 and HeaderMismatch (-32020).'
+  Each MUST be rejected with HTTP 400 and HeaderMismatch (-32020). The mismatched header names
+  2025-11-25, a legacy revision; a dual-era server may route such a request to its legacy
+  handling, so for dual-era servers any HTTP 400 passes that case.'

@@ -229,8 +229,10 @@ async def test_server_that_cannot_start_is_unavailable(tmp_path: Path) -> None:
 
 
 async def test_server_that_exits_reports_stderr(tmp_path: Path) -> None:
-    dies = StdioServer((sys.executable, "-c", "import sys; sys.stderr.write('missing API_KEY\\n')"))
-    with pytest.raises(ServerUnavailable, match="missing API_KEY"):
+    script = "import sys; sys.stderr.write('missing API_KEY\\n'); sys.exit(3)"
+    dies = StdioServer((sys.executable, "-c", script))
+    # An exit is reported as an exit with its code, not as a slow server.
+    with pytest.raises(ServerUnavailable, match=r"exited with code 3 at start-up.*missing API_KEY"):
         await _runner(dies, tmp_path).run([])
 
 

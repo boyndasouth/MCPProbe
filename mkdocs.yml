@@ -36,6 +36,7 @@ nav:
   - Calling tools safely: safety.md
   - Check catalog: checks/index.md
   - Decisions and departures: decisions.md
+  - "Release gate: public servers": gate-m4.md
 
 not_in_nav: |
   checks/*.md
