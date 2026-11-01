@@ -17,9 +17,11 @@ inputs:
     required: false
     default: ""
   headers:
+    # GitHub evaluates expressions anywhere in this file, descriptions included,
+    # so the example below must not contain one.
     description: >-
-      HTTP headers, one "Name: value" per line. Pass tokens from secrets, e.g.
-      "Authorization: Bearer ${{ secrets.MCP_TOKEN }}".
+      HTTP headers, one "Name: value" per line. Pass tokens from a repository
+      secret in the workflow that uses this action (see docs/ci.md).
     required: false
     default: ""
   env:
@@ -83,7 +85,7 @@ runs:
     - id: probe
       name: Run MCPProbe
       shell: bash
-      # Inputs reach the script through the environment, never by ${{ }} text
+      # Inputs reach the script through the environment, never by expression text
       # substitution, so a header or command cannot inject shell code.
       env:
         IN_STDIO: ${{ inputs.stdio }}

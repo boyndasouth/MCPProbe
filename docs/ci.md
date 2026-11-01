@@ -52,6 +52,19 @@ The action runs every suite, then:
 
 Outputs: `exit-code` and `sarif` (the report's path).
 
+For an HTTP server that needs a token, keep the token in a repository secret
+and pass it from your workflow:
+
+```yaml
+      - uses: boyndasouth/MCPProbe@v1
+        with:
+          http: http://127.0.0.1:8000/mcp
+          headers: |
+            Authorization: Bearer ${{ secrets.MCP_TOKEN }}
+```
+
+Header values that look sensitive are masked in every report.
+
 The action installs MCPProbe from its own checkout, so `@v1` always runs v1's
 code. For an HTTP server, start it in an earlier step (in the background) and
 wait until it answers before the action runs.
