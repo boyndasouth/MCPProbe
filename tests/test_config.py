@@ -213,3 +213,24 @@ async def test_total_timeout_skips_the_rest_and_fails_the_run(tmp_path: Path) ->
     assert skipped
     assert all(r.status is Status.SKIPPED for r in skipped)
     assert not any(r.status is Status.TIMEOUT for r in result.results)
+
+
+async def test_total_timeout_holds_when_timers_fire_a_tick_early(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # On Windows asyncio may fire a timer up to one clock tick (~16 ms) before
+    # the deadline, so the clock still shows a little time left when the run's
+    # deadline cuts a case short. That must still be "out of time", never a
+    # timeout finding against the server. Simulate it on any OS.
+    real = Runner._remaining
+
+    def lagging(self: Runner) -> float | None:
+        left = real(self)
+        return None if left is None else max(left, 0.016)
+
+    monkeypatch.setattr(Runner, "_remaining", lagging)
+    plan = collect(list(Suite)[:4], load_catalog(), SuiteOptions())
+    runner = Runner(stdio_spec(), 1, tmp_path / "cases", total_timeout=0.5)
+    result = await runner.run(plan)
+    assert result.out_of_time
+    assert not any(r.status is Status.TIMEOUT for r in result.results)

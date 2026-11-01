@@ -586,11 +586,15 @@ class Runner:
         )
         remaining = self._remaining()
         cut_short = remaining is not None and remaining < budget
+        scope = asyncio.timeout(remaining if cut_short else budget)
         try:
-            async with asyncio.timeout(remaining if cut_short else budget):
+            async with scope:
                 return await case.run(context), fresh
         except (TimeoutError, TransportTimeout):
-            if cut_short and self._remaining() == 0:
+            # Ask the timer whether it fired rather than re-reading the clock:
+            # asyncio may fire a timer up to one clock tick early (about 16 ms
+            # on Windows), when the deadline still looks a few ms away.
+            if cut_short and scope.expired():
                 # The run's time ran out, not the case's: not a finding.
                 return Outcome.skipped(OUT_OF_TIME), fresh
             return Outcome(Status.TIMEOUT, f"no answer within {budget:g}s"), fresh
