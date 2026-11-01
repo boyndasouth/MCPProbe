@@ -17,7 +17,7 @@ from mcpprobe.exit_codes import ExitCode
 
 if TYPE_CHECKING:
     from mcpprobe.engine.connection import ServerSpec
-    from mcpprobe.engine.runner import RunResult
+    from mcpprobe.engine.runner import Runner, RunResult
 
 app = typer.Typer(
     name="mcpprobe",
@@ -92,12 +92,24 @@ def run(
     header: Annotated[
         list[str] | None, typer.Option(help="Extra HTTP header, 'Name: value'. Repeatable.")
     ] = None,
-    suites: Annotated[str, typer.Option(help="Comma-separated suites to run.")] = DEFAULT_SUITES,
+    config: Annotated[
+        Path | None,
+        typer.Option(help="Config file (default: ./mcpprobe.toml if it exists)."),
+    ] = None,
+    suites: Annotated[
+        str | None, typer.Option(help=f"Comma-separated suites to run [default: {DEFAULT_SUITES}].")
+    ] = None,
     seed: Annotated[
         int | None, typer.Option(min=0, max=2**32 - 1, help="Seed for all randomness.")
     ] = None,
-    report: Annotated[ReportFormat, typer.Option(help="Report format.")] = ReportFormat.TERMINAL,
-    output: Annotated[Path | None, typer.Option("-o", "--output", help="Report file.")] = None,
+    report: Annotated[
+        list[ReportFormat] | None,
+        typer.Option(help="Report format; repeat for several (each file one needs an -o)."),
+    ] = None,
+    output: Annotated[
+        list[Path] | None,
+        typer.Option("-o", "--output", help="Report file, in the order of the --report options."),
+    ] = None,
     keep_going: Annotated[
         bool, typer.Option(help="Run later suites even if conformance fails.")
     ] = False,
@@ -109,28 +121,44 @@ def run(
         bool,
         typer.Option(help="Also call tools marked openWorldHint: true (they reach other hosts)."),
     ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option(help="List the server's tools and which would be called; call none."),
+    ] = False,
     examples: Annotated[
-        int, typer.Option(min=1, max=10_000, help="Generated argument sets per tool (FUZZ).")
-    ] = 50,
+        int | None,
+        typer.Option(
+            min=1, max=10_000, help="Generated argument sets per tool (FUZZ) [default: 50]."
+        ),
+    ] = None,
     concurrency: Annotated[
-        int, typer.Option(min=2, max=256, help="Requests in flight at once (ROB-007).")
-    ] = 8,
+        int | None,
+        typer.Option(min=2, max=256, help="Requests in flight at once (ROB-007) [default: 8]."),
+    ] = None,
     baseline: Annotated[
         Path | None, typer.Option(help="Previous JSON report; fail only on new findings.")
     ] = None,
     env: Annotated[
         list[str] | None, typer.Option(help="Env var for a stdio server, KEY=VALUE. Masked.")
     ] = None,
-    timeout: Annotated[float, typer.Option(min=0.1, help="Seconds allowed per case.")] = 10.0,
+    timeout: Annotated[
+        float | None, typer.Option(min=0.1, help="Seconds allowed per case [default: 10].")
+    ] = None,
     startup_timeout: Annotated[
-        float,
+        float | None,
         typer.Option(
-            min=0.1, help="Seconds to wait for the server's first answer (npx/uvx start-up)."
+            min=0.1,
+            help="Seconds for the server's first answer (npx/uvx start-up) [default: 30].",
         ),
-    ] = 30.0,
+    ] = None,
+    total_timeout: Annotated[
+        float | None,
+        typer.Option(min=0, help="Seconds for the whole run; 0 means no limit [default: 1800]."),
+    ] = None,
     cases_dir: Annotated[
-        Path, typer.Option(help="Where failing cases are saved for replay.")
-    ] = Path(".mcpprobe/cases"),
+        Path | None,
+        typer.Option(help="Where failing cases are saved for replay [default: .mcpprobe/cases]."),
+    ] = None,
     sarif_path: Annotated[
         str | None,
         typer.Option(
@@ -139,14 +167,68 @@ def run(
     ] = None,
 ) -> None:
     """Probe a server and report findings."""
+    from mcpprobe.config import ConfigError, apply_checks, load_config
+
+    try:
+        cfg = load_config(config, cwd=Path.cwd())
+    except ConfigError as exc:
+        raise _fail(str(exc), ExitCode.CONFIG_INVALID) from exc
+    source = cfg.source or "config"
+    # Command line beats the config file; the file beats the defaults.
+    if stdio is None and http is None:
+        stdio, http = cfg.server.stdio, cfg.server.http
+        config_headers = [f"{k}: {v}" for k, v in cfg.server.headers.items()]
+        config_env = [f"{k}={v}" for k, v in cfg.server.env.items()]
+        header = [*config_headers, *(header or [])] if http is not None else header
+        env = [*config_env, *(env or [])] if stdio is not None else env
     if (stdio is None) == (http is None):
-        raise _fail("pass exactly one of --stdio or --http", ExitCode.CONFIG_INVALID)
+        raise _fail(
+            "pass exactly one of --stdio or --http (or set one in mcpprobe.toml [server])",
+            ExitCode.CONFIG_INVALID,
+        )
     if header and http is None:
         raise _fail("--header only applies to --http servers", ExitCode.CONFIG_INVALID)
     if env and stdio is None:
         raise _fail("--env only applies to --stdio servers", ExitCode.CONFIG_INVALID)
     headers = _parse_headers(header)
     env_vars = _parse_env(env)
+    run_cfg = cfg.run
+    suites = suites or (",".join(run_cfg.suites) if run_cfg.suites else DEFAULT_SUITES)
+    seed = seed if seed is not None else run_cfg.seed
+    examples = examples or run_cfg.fuzz_examples_per_tool or 50
+    concurrency = concurrency or run_cfg.concurrency or 8
+    timeout = timeout or (run_cfg.timeout_ms / 1000 if run_cfg.timeout_ms else 10.0)
+    startup_timeout = startup_timeout or (
+        run_cfg.startup_timeout_ms / 1000 if run_cfg.startup_timeout_ms else 30.0
+    )
+    if total_timeout is None:
+        total_timeout = (
+            run_cfg.total_timeout_ms / 1000 if run_cfg.total_timeout_ms is not None else 1800.0
+        )
+    allow_destructive = allow_destructive or bool(run_cfg.allow_destructive)
+    allow_open_world = allow_open_world or bool(run_cfg.allow_open_world)
+    keep_going = keep_going or bool(run_cfg.keep_going)
+    cases_dir = cases_dir or Path(run_cfg.cases_dir or ".mcpprobe/cases")
+    baseline = baseline or (Path(run_cfg.baseline) if run_cfg.baseline else None)
+
+    reports = report or [ReportFormat.TERMINAL]
+    files = output or []
+    file_reports = [r for r in reports if r is not ReportFormat.TERMINAL]
+    if len(set(reports)) != len(reports):
+        raise _fail("each --report format may be given once", ExitCode.CONFIG_INVALID)
+    if files and len(files) != len(file_reports):
+        raise _fail(
+            f"{len(file_reports)} file report(s) but {len(files)} -o option(s); give one -o per "
+            "non-terminal --report, in the same order",
+            ExitCode.CONFIG_INVALID,
+        )
+    if not files and len(file_reports) > 1:
+        raise _fail("several file reports need one -o each", ExitCode.CONFIG_INVALID)
+    if files and not file_reports:
+        raise _fail("-o needs a file format, e.g. --report json", ExitCode.CONFIG_INVALID)
+    if sarif_path is not None and ReportFormat.SARIF not in reports:
+        raise _fail("--sarif-path only applies to --report sarif", ExitCode.CONFIG_INVALID)
+
     known: frozenset[str] | None = None
     if baseline is not None:
         from mcpprobe.report.baseline import BaselineError, load_baseline
@@ -157,12 +239,11 @@ def run(
             known = load_baseline(baseline)
         except BaselineError as exc:
             raise _fail(str(exc), ExitCode.CONFIG_INVALID) from exc
-    if sarif_path is not None and report is not ReportFormat.SARIF:
-        raise _fail("--sarif-path only applies to --report sarif", ExitCode.CONFIG_INVALID)
-    if output is not None and report is ReportFormat.TERMINAL:
-        raise _fail("-o needs a file format, e.g. --report json", ExitCode.CONFIG_INVALID)
     wanted = _parse_suites(suites)
-    catalog = _load_catalog_or_exit()
+    try:
+        catalog = apply_checks(_load_catalog_or_exit(), cfg.checks, source)
+    except ConfigError as exc:
+        raise _fail(str(exc), ExitCode.CONFIG_INVALID) from exc
 
     from mcpprobe.engine.connection import HttpServer, StdioServer
     from mcpprobe.engine.runner import Runner, ServerUnavailable
@@ -199,23 +280,74 @@ def run(
         fuzz_examples=examples,
         concurrency=concurrency,
         startup_timeout=startup_timeout,
+        total_timeout=total_timeout or None,
         baseline=known,
     )
+    if dry_run:
+        _dry_run(runner, allow_destructive, allow_open_world)
+        raise typer.Exit(int(ExitCode.PASSED))
     try:
         result = asyncio.run(runner.run(plan))
     except ServerUnavailable as exc:
         raise _fail(str(exc), ExitCode.PROBE_ERROR) from exc
-    if report is ReportFormat.TERMINAL:
-        render(result, out, cases_dir=cases_dir)
-    else:
-        text = _format_report(report, result, spec, catalog, cases_dir, sarif_path)
-        if output is None:
-            typer.echo(text, nl=False)
-        else:
-            output.parent.mkdir(parents=True, exist_ok=True)
-            output.write_text(text, encoding="utf-8")
-            render(result, err, cases_dir=cases_dir)
+    summary = out
+    if file_reports:
+        summary = err  # stdout may carry a report; the summary goes to stderr
+        for index, fmt in enumerate(file_reports):
+            text = _format_report(fmt, result, spec, catalog, cases_dir, sarif_path)
+            if files:
+                files[index].parent.mkdir(parents=True, exist_ok=True)
+                files[index].write_text(text, encoding="utf-8")
+            else:
+                typer.echo(text, nl=False)
+    render(result, summary, cases_dir=cases_dir)
+    if result.out_of_time:
+        err.print(
+            f"[bold red]incomplete:[/] the total timeout ({total_timeout:g}s) ran out; "
+            "raise --total-timeout to run every case"
+        )
     raise typer.Exit(int(result.exit_code))
+
+
+def _dry_run(runner: Runner, allow_destructive: bool, allow_open_world: bool) -> None:
+    """Print the era and which tools a run would call, without calling any."""
+    from mcpprobe.engine.runner import ServerUnavailable
+    from mcpprobe.suites.conf.tools import unsafe_reason
+
+    try:
+        facts, tools = asyncio.run(runner.inventory())
+    except ServerUnavailable as exc:
+        raise _fail(str(exc), ExitCode.PROBE_ERROR) from exc
+    out.print(f"era: {facts.era.value}", highlight=False)
+    if isinstance(tools, str):
+        out.print(f"no tools: {tools}", highlight=False)
+        return
+    table = Table("tool", "would be called", "why", title="Dry run: no tool was called")
+    called = 0
+    for tool in tools:
+        reason = unsafe_reason(
+            tool, allow_destructive=allow_destructive, allow_open_world=allow_open_world
+        )
+        if reason is None:
+            called += 1
+        name = str(tool.get("name"))
+        table.add_row(name, "no" if reason else "yes", reason or _why_safe(tool, allow_destructive))
+    out.print(table)
+    out.print(
+        f"{called} of {len(tools)} tool(s) would be called by CONF, FUZZ, ROB and SEC "
+        "(FUZZ calls each of them --examples times).",
+        highlight=False,
+    )
+
+
+def _why_safe(tool: dict[str, object], allow_destructive: bool) -> str:
+    annotations = tool.get("annotations")
+    hints = annotations if isinstance(annotations, dict) else {}
+    if hints.get("readOnlyHint") is True:
+        return "readOnlyHint: true"
+    if hints.get("destructiveHint") is False:
+        return "destructiveHint: false"
+    return "--allow-destructive" if allow_destructive else ""
 
 
 def _format_report(

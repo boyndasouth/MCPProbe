@@ -22,9 +22,46 @@ pipx install git+https://github.com/boyndasouth/MCPProbe@v0.3.0
 uv add git+https://github.com/boyndasouth/MCPProbe@v0.3.0
 ```
 
-From v1.0 it will be on PyPI as **`mcpprobe-cli`** (`pipx install mcpprobe-cli`);
+From v1.0 it will be on PyPI as **`mcpprobe-kit`** (`pipx install mcpprobe-kit`);
 the command stays `mcpprobe`. (PyPI treats "mcpprobe" as too similar to an
 unrelated existing project, "mcp-probe".)
+
+Full documentation: **https://boyndasouth.github.io/MCPProbe/** (quickstart,
+CI recipes, configuration, the check catalog).
+
+## GitHub Action
+
+```yaml
+- uses: boyndasouth/MCPProbe@v1
+  with:
+    stdio: node dist/index.js
+    seed: "42"
+```
+
+Runs every suite, uploads SARIF to code scanning, attaches JSON, JUnit and
+HTML reports as an artifact, writes a job summary, and fails the job on error
+findings. Add `baseline: mcpprobe-baseline.json` to fail only on new ones. See
+[docs/ci.md](docs/ci.md) for every input.
+
+## Configuration
+
+Options can live in `mcpprobe.toml` next to your server (command-line options
+win). `${NAME}` reads an environment variable, so secrets stay out of the file:
+
+```toml
+[server]
+stdio = "python -m my_server"
+env = { API_KEY = "${API_KEY}" }
+
+[run]
+seed = 42
+
+[checks]
+disable = ["CONF-012"]
+severity_overrides = { "SEC-002" = "info" }
+```
+
+See [docs/configuration.md](docs/configuration.md).
 
 ## Usage
 
@@ -41,8 +78,10 @@ mcpprobe run --http http://127.0.0.1:8000/mcp --header "Authorization: Bearer $T
 mcpprobe run --stdio "node dist/index.js" --seed 42 --report json -o probe.json
 
 # Reports for CI: JUnit for test tabs, SARIF for GitHub code scanning, HTML to share
-mcpprobe run --stdio "node dist/index.js" --report sarif -o probe.sarif
-mcpprobe run --stdio "node dist/index.js" --report html -o probe.html
+mcpprobe run --stdio "node dist/index.js" --report sarif -o probe.sarif --report html -o probe.html
+
+# See which tools a run would call, without calling any
+mcpprobe run --stdio "node dist/index.js" --dry-run
 
 # Adopt in CI without fixing everything first: fail only on new findings
 mcpprobe run --stdio "node dist/index.js" --report json -o probe-baseline.json  # once, commit it
@@ -64,8 +103,8 @@ Useful options for `run`:
 | `--suites LIST` | `conf,fuzz,rob,sec` | Which suites to run |
 | `--examples N` | 50 | Generated argument sets per tool (FUZZ) |
 | `--concurrency N` | 8 | Requests in flight at once (ROB-007) |
-| `--report FORMAT` | terminal | `terminal`, `json`, `junit`, `sarif` or `html`; all deterministic |
-| `-o FILE` | stdout | Where a non-terminal report goes (the summary then prints on stderr) |
+| `--report FORMAT` | terminal | `terminal`, `json`, `junit`, `sarif` or `html`; repeatable; all deterministic |
+| `-o FILE` | stdout | One per non-terminal report, in order (the summary then prints on stderr) |
 | `--baseline FILE` | none | A previous JSON report: its findings are shown as known and don't fail the run |
 | `--sarif-path PATH` | entry file | Repository file SARIF alerts point at (code scanning needs one) |
 | `--timeout S` | 10 | Seconds allowed per case |
@@ -74,6 +113,9 @@ Useful options for `run`:
 | `--allow-open-world` | off | Also call tools marked `openWorldHint: true` |
 | `--keep-going` | off | Run later suites even if conformance fails |
 | `--cases-dir DIR` | `.mcpprobe/cases` | Where failing cases are saved |
+| `--config PATH` | `./mcpprobe.toml` | Config file |
+| `--total-timeout S` | 1800 | Seconds for the whole run; when it runs out the rest is skipped (exit 2) |
+| `--dry-run` | off | List the tools and which would be called; call none |
 
 | Exit code | Meaning |
 |---|---|

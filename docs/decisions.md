@@ -25,8 +25,8 @@ Each entry has a status:
   nobody signed it off; confirm or reverse it.
 - **Open**: in the spec but not built yet.
 
-Last updated: 2026-10-31, during M4 (after the SEC suite, before the GitHub
-Action, docs site and PyPI release).
+Last updated: 2026-10-31, during M4 (after batch 3: config file, dry run,
+total timeout, GitHub Action, docs site, PyPI publishing; before the M4 gate).
 
 ---
 
@@ -34,7 +34,7 @@ Action, docs site and PyPI release).
 
 | # | The spec says | What was built | Why | Status |
 |---|---|---|---|---|
-| D1 | Package `mcpprobe` on PyPI ("Is the name free? Check before the first commit") | Distribution `mcpprobe-cli`; the command and import name stay `mcpprobe` | `mcpprobe` is technically free, but PyPI compares names with hyphens removed, and an unrelated MCP security scanner, `mcp-probe`, exists. The upload would be rejected as too similar | Approved |
+| D1 | Package `mcpprobe` on PyPI ("Is the name free? Check before the first commit") | Distribution `mcpprobe-kit`; the command and import name stay `mcpprobe` | PyPI compares names with `-`, `_` and `.` removed and `o`→`0`, `l`/`i`→`1`, and refuses a match as "too similar". `mcpprobe` matches the unrelated `mcp-probe`, and `mcpprobe-cli` (the first choice) matches `mcp-probe-cli`, so both are refused. `mcpprobe-kit` was accepted on PyPI on 2026-10-31 | Approved |
 | D2 | GitHub Action at `uses: <owner>/mcpprobe-action@v1` (a separate repo), but the repo layout shows an `action/` folder | The Action lives in this repo (`uses: boyndasouth/MCPProbe@v1`) | One repo, so the Action and the tool are always versioned together | Approved (M4 batch 3) |
 | D3 | M4 ends in the v1.0 release; v1.0 success criteria include "adopted in CI by at least 3 public MCP server repos that aren't mine" | v1.0.0 is tagged at the end of M4 | Adoption can only happen after a release; it is tracked as a goal, not a release blocker | Approved |
 | D4 | Reports use `sarif-om` for SARIF | SARIF is written as plain JSON; `sarif-om` was removed | `sarif-om` needs extra serializer packages and cannot guarantee key order (determinism). Output is validated against the official SARIF 2.1.0 schema in tests | Review |
@@ -47,6 +47,10 @@ Action, docs site and PyPI release).
 | D6 | "Destructive tools (`destructiveHint: true`) are skipped unless `--allow-destructive`" | A tool is called only if marked `readOnlyHint: true` or `destructiveHint: false`; unannotated tools are skipped too. `openWorldHint: true` tools need `--allow-open-world` | MCP's annotation defaults treat an unannotated tool as destructive and open-world. Calling open-world tools with random input would send traffic to hosts the user never named, which the spec forbids | Approved (open-world flag); Review (unannotated = destructive, in place since M1) |
 | D7 | Concurrency "(default 8)" | `--concurrency N`, default 8 | The spec's wording implies it is configurable | Review |
 | D8 | `--report sarif` with GitHub code scanning | SARIF alerts point at line 1 of a repo file: `--sarif-path`, else the server's entry file from the stdio command, else `README.md` | Code scanning only shows alerts that have a file location, and a server finding has none | Review |
+| D34 | Config keys `[run] suites, seed, fuzz_examples_per_tool, timeout_ms, allow_destructive` | Also `startup_timeout_ms`, `total_timeout_ms`, `concurrency`, `allow_open_world`, `keep_going`, `cases_dir`, `baseline`, and `[server] headers`; `${VAR}` expansion in `[server]` | Every CLI option the Action may need has a config key; expansion keeps secrets out of the file | Review |
+| D35 | "Per-request and total timeouts" | `--total-timeout` defaults to 1800 s; when it runs out, the rest of the cases are skipped and the exit code is 2 | A run cut short must not pass a CI gate | Review |
+| D36 | (not in the spec) | The Action installs MCPProbe from its own checkout (`uv tool run --from <action path>`), not from PyPI | `@v1` then always runs v1's code, and the Action works before and without PyPI | Review |
+| D37 | Docs site (no tool named) | MkDocs with Material, built with `--strict` and published to GitHub Pages | Material reaches end of life on 2027-05-05; its successor, Zensical, reads the same `mkdocs.yml`, so moving is a small change before then | Review |
 | D9 | `mcpprobe replay .mcpprobe/cases/FUZZ-003-7f2a.json` (hash in the name) | Cases are saved as `<case id>.json` (`FUZZ-003_echo.json`) | Names derived only from the case id keep runs byte-identical | Review |
 
 ## Conformance (CONF)
@@ -104,16 +108,14 @@ Action, docs site and PyPI release).
 
 | # | The spec says | Where it stands |
 |---|---|---|
-| O1 | Optional `mcpprobe.toml` (`[server]`, `[run]`, `[checks] disable`, `severity_overrides`, `[eval]`) | Not implemented; everything is a CLI flag. Needed for the Action and for "disable a check" | 
-| O2 | "Dry-run mode lists what would be called" (Safety) | Not implemented |
-| O3 | "Per-request and total timeouts" | Per-case and per-call timeouts exist; there is no total run timeout |
+| O1 | Optional `mcpprobe.toml` | **Built in M4 batch 3** (see D34) |
+| O2 | "Dry-run mode lists what would be called" (Safety) | **Built in M4 batch 3**: `--dry-run` |
+| O3 | "Per-request and total timeouts" | **Built in M4 batch 3** (see D35) |
 | O4 | Pydantic message models generated from the official JSON Schema per revision | Requests are built by hand in `protocol/` on purpose (the raw wire client must be able to send malformed messages); there are no generated models. Decide whether they are still wanted |
-| O5 | GitHub Action, docs site, PyPI via trusted publishing, signed releases | M4 batch 3 |
+| O5 | GitHub Action, docs site, PyPI via trusted publishing, signed releases | **Built in M4 batch 3**; needs one-time setup on pypi.org and in the repository settings before the first release |
 | O6 | Run on 10+ public servers, review every finding by hand, no known false positives | M4 gate |
 | O7 | EVAL suite | M5 (v1.1) |
 
-O1–O3 sit under the spec's production-grade requirements, so they should land
-before v1.0.0, together with batch 3 or the gate.
 
 ## Keeping this file current
 

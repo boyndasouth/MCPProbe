@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="mcpprobe 0.3.0">
+<title>MCPProbe report</title>
+<style>
+:root {
+  --bg: #fbfaf8; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6a66; --line: #e4e2dc;
+  --fail: #b42318; --fail-bg: #fdecea; --warn: #8a5a00; --warn-bg: #fff4dc;
+  --note: #1f5f99; --note-bg: #e8f1fb; --pass: #2e6b3a; --pass-bg: #e8f4ea;
+  --code-bg: #f3f1ec;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161614; --panel: #1f1f1c; --text: #ecebe6; --muted: #a3a29c; --line: #34332f;
+    --fail: #ff8a80; --fail-bg: #3a1c1a; --warn: #f2c26b; --warn-bg: #362b14;
+    --note: #8cc2ff; --note-bg: #182a3d; --pass: #8fd19e; --pass-bg: #1b3020;
+    --code-bg: #2a2925;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -0.01em; }
+h2 { font-size: 17px; margin: 36px 0 12px; }
+.sub { color: var(--muted); margin: 0 0 24px; }
+.verdict { display: inline-block; font-weight: 600; padding: 2px 10px; border-radius: 999px; }
+.verdict.ok { color: var(--pass); background: var(--pass-bg); }
+.verdict.bad { color: var(--fail); background: var(--fail-bg); }
+dl.meta { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 16px 0; }
+dl.meta dt { color: var(--muted); }
+dl.meta dd { margin: 0; overflow-wrap: anywhere; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tile b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--muted); font-size: 13px; }
+.item { background: var(--panel); border: 1px solid var(--line); border-left-width: 4px;
+  border-radius: 8px; padding: 12px 14px; margin: 0 0 10px; }
+.item.finding { border-left-color: var(--fail); }
+.item.warning { border-left-color: var(--warn); }
+.item.note { border-left-color: var(--note); }
+.item.error { border-left-color: var(--fail); }
+.head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.id { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-weight: 600; overflow-wrap: anywhere; }
+.badge { font-size: 12px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.badge.finding, .badge.error { color: var(--fail); background: var(--fail-bg); }
+.badge.warning { color: var(--warn); background: var(--warn-bg); }
+.badge.note { color: var(--note); background: var(--note-bg); }
+.badge.known { color: var(--muted); background: var(--code-bg); }
+.title { color: var(--muted); }
+.msg { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 0; }
+code, .cmd { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 13px; }
+.cmd { display: block; background: var(--code-bg); padding: 6px 10px; border-radius: 6px;
+  margin-top: 8px; overflow-x: auto; white-space: pre; }
+a { color: var(--note); }
+details { margin-top: 28px; }
+summary { cursor: pointer; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+td { border-top: 1px solid var(--line); padding: 6px 8px; vertical-align: top; overflow-wrap: anywhere; }
+td.st { white-space: nowrap; color: var(--muted); }
+.empty { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+<h1>MCPProbe report</h1>
+<p class="sub">
+  <span class="verdict bad">Failed</span>
+  &nbsp;exit code 1
+</p>
+<dl class="meta">
+  <dt>Server</dt><dd><code>npx -y @modelcontextprotocol/server-everything</code></dd>
+  <dt>Era</dt><dd>dual</dd>
+  <dt>Seed</dt><dd><code>1040255892</code> (rerun with <code>--seed 1040255892</code> for the same report)</dd>
+  
+  <dt>MCPProbe</dt><dd>0.3.0</dd>
+</dl>
+<div class="tiles">
+  <div class="tile"><b>44</b><span>cases</span></div><div class="tile"><b>2</b><span>fail the run</span></div><div class="tile"><b>1</b><span>warnings</span></div><div class="tile"><b>0</b><span>notes</span></div><div class="tile"><b>23</b><span>passed</span></div><div class="tile"><b>18</b><span>skipped</span></div>
+</div>
+
+
+<h2>Findings that fail the run (2)</h2>
+
+
+<div class="item finding">
+  <div class="head">
+    <span class="id">CONF-003</span>
+    <span class="badge finding">fails the run</span>
+    
+    <span class="title">Unsupported protocol version returns -32022 with data.supported</span>
+  </div>
+  <p class="msg">tools/list with version 1900-01-01 got a result, expected error -32022</p>
+  <code class="cmd">mcpprobe replay .mcpprobe/cases/CONF-003.json</code>
+  <div><a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning#protocol-version-negotiation">Spec section</a></div>
+</div>
+
+<div class="item finding">
+  <div class="head">
+    <span class="id">CONF-020</span>
+    <span class="badge finding">fails the run</span>
+    
+    <span class="title">Protocol version is read from each request, not remembered</span>
+  </div>
+  <p class="msg">after a valid 2026-07-28 request, tools/list with version 1900-01-01 got a result, expected error -32022; the server appears to keep the protocol version from earlier requests</p>
+  <code class="cmd">mcpprobe replay .mcpprobe/cases/CONF-020.json</code>
+  <div><a href="https://modelcontextprotocol.io/specification/2026-07-28/basic/index#statelessness">Spec section</a></div>
+</div>
+
+
+<h2>Warnings (1)</h2>
+
+
+<div class="item warning">
+  <div class="head">
+    <span class="id">CONF-016</span>
+    <span class="badge warning">warning</span>
+    
+    <span class="title">Deprecated logging capability is declared</span>
+  </div>
+  <p class="msg">declares the logging capability, deprecated in 2026-07-28</p>
+  <code class="cmd">mcpprobe replay .mcpprobe/cases/CONF-016.json</code>
+  <div><a href="https://modelcontextprotocol.io/specification/2026-07-28/deprecated#deprecated">Spec section</a></div>
+</div>
+
+
+<h2>Notes (0)</h2>
+<p class="empty">None.</p>
+
+
+
+<details>
+  <summary>Passed and skipped (41)</summary>
+  <table>
+    
+    <tr><td class="id">CONF-001</td><td class="st">passed</td><td>server/discover exists and lists supported versions and capabilities</td></tr>
+    
+    <tr><td class="id">CONF-002/clientCapabilities</td><td class="st">passed</td><td>Requests missing required _meta fields are rejected with -32602</td></tr>
+    
+    <tr><td class="id">CONF-002/protocolVersion</td><td class="st">passed</td><td>Requests missing required _meta fields are rejected with -32602</td></tr>
+    
+    <tr><td class="id">CONF-004</td><td class="st">passed</td><td>Every result carries resultType</td></tr>
+    
+    <tr><td class="id">CONF-005/echo</td><td class="st">passed</td><td>Request ids: null is rejected and responses echo the id exactly</td></tr>
+    
+    <tr><td class="id">CONF-005/echo@legacy</td><td class="st">passed</td><td>Request ids: null is rejected and responses echo the id exactly</td></tr>
+    
+    <tr><td class="id">CONF-005/null-id</td><td class="st">passed</td><td>Request ids: null is rejected and responses echo the id exactly</td></tr>
+    
+    <tr><td class="id">CONF-005/null-id@legacy</td><td class="st">passed</td><td>Request ids: null is rejected and responses echo the id exactly</td></tr>
+    
+    <tr><td class="id">CONF-008</td><td class="st">passed</td><td>Unknown tools get a JSON-RPC error, not a tool result</td></tr>
+    
+    <tr><td class="id">CONF-008@legacy</td><td class="st">passed</td><td>Unknown tools get a JSON-RPC error, not a tool result</td></tr>
+    
+    <tr><td class="id">CONF-009</td><td class="st">passed</td><td>Undeclared client capabilities are never relied on</td></tr>
+    
+    <tr><td class="id">CONF-010</td><td class="st">passed</td><td>input_required results are well formed and only used where allowed</td></tr>
+    
+    <tr><td class="id">CONF-011</td><td class="st">passed</td><td>structuredContent matches the tool&#39;s outputSchema</td></tr>
+    
+    <tr><td class="id">CONF-011@legacy</td><td class="st">passed</td><td>structuredContent matches the tool&#39;s outputSchema</td></tr>
+    
+    <tr><td class="id">CONF-012</td><td class="st">passed</td><td>tools/list returns tools in a deterministic order</td></tr>
+    
+    <tr><td class="id">CONF-013/handshake</td><td class="st">passed</td><td>Legacy initialize handshake and version negotiation</td></tr>
+    
+    <tr><td class="id">CONF-013/negotiation</td><td class="st">passed</td><td>Legacy initialize handshake and version negotiation</td></tr>
+    
+    <tr><td class="id">CONF-014</td><td class="st">skipped</td><td>supportedVersions lists no initialize-era revision</td></tr>
+    
+    <tr><td class="id">CONF-015</td><td class="st">passed</td><td>stdio: stdout carries only newline-delimited JSON-RPC messages</td></tr>
+    
+    <tr><td class="id">CONF-015@legacy</td><td class="st">passed</td><td>stdio: stdout carries only newline-delimited JSON-RPC messages</td></tr>
+    
+    <tr><td class="id">CONF-017</td><td class="st">passed</td><td>Results identify the server in _meta serverInfo</td></tr>
+    
+    <tr><td class="id">CONF-018</td><td class="st">passed</td><td>Cacheable results carry ttlMs and cacheScope</td></tr>
+    
+    <tr><td class="id">CONF-021</td><td class="st">passed</td><td>initialize answers an unsupported version with a supported one</td></tr>
+    
+    <tr><td class="id">CONF-022</td><td class="st">passed</td><td>Server negotiates an outdated initialize-era revision</td></tr>
+    
+    <tr><td class="id">FUZZ-001</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">FUZZ-002</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">FUZZ-003</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">FUZZ-004</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">ROB-001</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">ROB-002</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">ROB-003</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">ROB-004</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">ROB-005/10mb</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">ROB-005/1mb</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">ROB-006/stdio</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">ROB-007</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">SEC-001</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">SEC-002</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">SEC-003</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">SEC-006</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+    <tr><td class="id">SEC-007</td><td class="st">skipped</td><td>conformance failed</td></tr>
+    
+  </table>
+</details>
+</main>
+</body>
+</html>

@@ -30,11 +30,29 @@ Milestone M4: reports, baseline mode and the SEC suite.
   characters in tool metadata; SEC-007 (error) the tool list does not change
   between connections or after a call.
 - Reference fixture: `--require-token` for HTTP authorization tests.
+- `mcpprobe.toml`: `[server]`, `[run]`, `[checks] disable` and
+  `severity_overrides`, with `${VAR}` expansion; `--config PATH`. Unknown keys
+  and check ids are errors. `[eval]` is accepted for M5.
+- `--dry-run` lists the server's tools and which ones a run would call,
+  without calling any.
+- `--total-timeout` (default 30 minutes): cases that would start after it are
+  skipped, and the run exits 2 because it is incomplete.
+- Several reports in one run: repeat `--report` with one `-o` each.
+- GitHub Action (`uses: boyndasouth/MCPProbe@v1`, `action.yml` at the repo
+  root): SARIF to code scanning, reports as an artifact, a job summary, and a
+  failing job on error findings; tested by a self-test workflow.
+- Docs site (MkDocs Material, published to GitHub Pages) with the check
+  catalog generated from `checks/`; a test keeps the pages in step.
+- Releases publish to PyPI through trusted publishing, with signed
+  build-provenance attestations on PyPI and GitHub.
 
 ### Changed
-- The package is published as `mcpprobe-cli` (the command and import name
-  stay `mcpprobe`): PyPI rejects "mcpprobe" as too similar to "mcp-probe".
+- The package is published as `mcpprobe-kit` (the command and import name
+  stay `mcpprobe`): PyPI rejects "mcpprobe" and "mcpprobe-cli" as too similar
+  to the existing "mcp-probe" and "mcp-probe-cli".
 - The terminal report labels warnings as `warning` instead of `failed`.
+- When a report goes to stdout, the summary is now printed on stderr
+  (before, it was not printed at all).
 - Dropped the unused `sarif-om` dependency: SARIF is written as plain JSON and
   tested against the official 2.1.0 schema.
 - Messages containing a lone surrogate (echoed back from fuzzed input) are

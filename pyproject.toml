@@ -1,7 +1,8 @@
 [project]
 # The command and the import package are `mcpprobe`; the distribution is
-# mcpprobe-cli because PyPI treats "mcpprobe" as too similar to "mcp-probe".
-name = "mcpprobe-cli"
+# mcpprobe-kit because PyPI rejects "mcpprobe" (too similar to "mcp-probe") and
+# "mcpprobe-cli" (too similar to "mcp-probe-cli").
+name = "mcpprobe-kit"
 version = "0.3.0"
 description = "Conformance checker, schema fuzzer and tool-usability evaluator for MCP servers"
 readme = "README.md"
@@ -58,6 +59,9 @@ dev = [
     "types-PyYAML",
     "types-jsonschema",
 ]
+docs = [
+    "mkdocs-material>=9.5",
+]
 
 [build-system]
 requires = ["hatchling>=1.26"]
@@ -88,6 +92,10 @@ ignore = [
     "N818", # TransportTimeout reads better than TransportTimeoutError
 ]
 
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic reads annotations at runtime, so their imports must stay real.
+runtime-evaluated-base-classes = ["pydantic.BaseModel", "mcpprobe.config._Section"]
+
 [tool.ruff.lint.per-file-ignores]
 # Typer inspects annotations at runtime, so their imports must stay real.
 "src/mcpprobe/cli.py" = ["TC003"]
@@ -95,7 +103,7 @@ ignore = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]

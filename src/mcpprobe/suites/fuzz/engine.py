@@ -192,6 +192,7 @@ class Driver:
 
     def _run(self, coro: Any) -> Any:
         if self.stop.is_set():
+            coro.close()  # never scheduled: close it so it is not reported as un-awaited
             raise _Stop
         self._pending = asyncio.run_coroutine_threadsafe(coro, self.loop)
         try:

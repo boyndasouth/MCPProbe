@@ -282,4 +282,5 @@ def test_run_json_report(tmp_path: Path) -> None:
     to_stdout = runner.invoke(
         app, ["run", "--stdio", command, "--report", "json", "--cases-dir", str(tmp_path / "c")]
     )
-    assert json.loads(to_stdout.output)["exit_code"] == 1
+    # stdout carries only the report; the summary goes to stderr.
+    assert json.loads(to_stdout.stdout)["exit_code"] == 1

@@ -1,8 +1,18 @@
 name: Release
 
-# Push a tag like v0.1.0 to build, smoke-test on every OS, and publish a
-# GitHub release with the wheel and sdist attached. Publishing to PyPI is
-# deliberately not automated here.
+# Push a tag like v1.0.0 to build, smoke-test on every OS, publish to PyPI as
+# mcpprobe-kit (trusted publishing: no API token is stored anywhere), and
+# create a GitHub release with the wheel and sdist attached.
+#
+# Every artifact gets a signed build-provenance attestation (Sigstore), on
+# PyPI (PEP 740) and on GitHub. Check one with:
+#   gh attestation verify mcpprobe_kit-1.0.0-py3-none-any.whl --repo boyndasouth/MCPProbe
+#
+# One-time setup, before the first tag:
+# - pypi.org -> Your account -> Publishing -> add a pending publisher:
+#   project mcpprobe-kit, owner boyndasouth, repository MCPProbe,
+#   workflow release.yml, environment pypi
+# - GitHub -> Settings -> Environments -> New environment: pypi
 
 on:
   push:
@@ -14,6 +24,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write       # to sign the attestation
+      attestations: write   # to store it on GitHub
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -25,6 +39,10 @@ jobs:
             exit 1
           fi
       - run: uv build
+      - name: Sign build provenance for the wheel and sdist
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -62,8 +80,23 @@ jobs:
           # The reference server passes every check, so this must exit 0.
           "$bin/mcpprobe" run --stdio "$py -u fixtures/servers/reference.py" --seed 1
 
-  release:
+  pypi:
     needs: smoke
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/mcpprobe-kit/
+    permissions:
+      id-token: write   # trusted publishing; also signs the PEP 740 attestations
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  release:
+    needs: pypi
     runs-on: ubuntu-latest
     permissions:
       contents: write

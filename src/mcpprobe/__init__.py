@@ -2,8 +2,8 @@
 
 from importlib.metadata import PackageNotFoundError, version
 
-DISTRIBUTION = "mcpprobe-cli"
-"""The name on PyPI (``pip install mcpprobe-cli``); the command is ``mcpprobe``."""
+DISTRIBUTION = "mcpprobe-kit"
+"""The name on PyPI (``pip install mcpprobe-kit``); the command is ``mcpprobe``."""
 
 try:
     __version__ = version(DISTRIBUTION)

@@ -1,0 +1,80 @@
+name: Action self-test
+
+# Runs the GitHub Action in this repository (uses: ./) the way a server repo
+# would, against the reference fixture server: once where it must pass and
+# once where it must fail the job.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  passes:
+    name: passes (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - id: probe
+        uses: ./
+        with:
+          stdio: python -u fixtures/servers/reference.py
+          seed: "1"
+          upload-sarif: "false"
+          sarif-category: reference-${{ matrix.os }}
+      - name: The reports exist and the run passed
+        shell: bash
+        run: |
+          test "${{ steps.probe.outputs.exit-code }}" = "0"
+          for f in probe.json probe.sarif junit.xml report.html; do test -s "mcpprobe-report/$f"; done
+
+  fails-on-findings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: probe
+        continue-on-error: true
+        uses: ./
+        with:
+          stdio: python3 -u fixtures/servers/reference.py --break CONF-004
+          suites: conf
+          seed: "1"
+          upload-sarif: "false"
+          sarif-category: broken-reference
+      - name: The action failed the step, with exit code 1
+        run: |
+          test "${{ steps.probe.outcome }}" = "failure"
+          test "${{ steps.probe.outputs.exit-code }}" = "1"
+          grep -q CONF-004 mcpprobe-report/probe.sarif
+
+  baseline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Make a baseline that knows the broken check
+        run: |
+          uv tool run --from . mcpprobe run --stdio "python3 -u fixtures/servers/reference.py --break CONF-004" \
+            --suites conf --seed 1 --report json -o baseline.json || true
+          test -s baseline.json
+      - id: probe
+        uses: ./
+        with:
+          stdio: python3 -u fixtures/servers/reference.py --break CONF-004
+          suites: conf
+          seed: "1"
+          baseline: baseline.json
+          upload-sarif: "false"
+          sarif-category: baselined-reference
+      - name: Known findings do not fail the job
+        run: test "${{ steps.probe.outputs.exit-code }}" = "0"

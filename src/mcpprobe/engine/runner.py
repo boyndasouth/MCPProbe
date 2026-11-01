@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 
 LIVENESS_METHOD = "tools/list"
 MAX_TOOL_PAGES = 20
+OUT_OF_TIME = "the total timeout ran out before this case (--total-timeout)"
 
 
 class Status(StrEnum):
@@ -189,6 +190,8 @@ class RunResult:
     facts: ServerFacts | None = None
     baseline: frozenset[str] | None = None
     """Case ids that were already findings in the ``--baseline`` report, if one was given."""
+    out_of_time: bool = False
+    """The total timeout ran out: some cases were skipped, so the run is incomplete."""
 
     def is_new(self, result: CaseResult) -> bool:
         """A finding that the baseline does not know (every finding, without a baseline)."""
@@ -196,7 +199,7 @@ class RunResult:
 
     @property
     def exit_code(self) -> ExitCode:
-        if any(r.status is Status.ERROR for r in self.results):
+        if self.out_of_time or any(r.status is Status.ERROR for r in self.results):
             return ExitCode.PROBE_ERROR
         if any(self.is_new(r) for r in self.results):
             return ExitCode.FAILED
@@ -242,9 +245,12 @@ class Runner:
     concurrency: int = 8
     baseline: frozenset[str] | None = None
     """Known findings (case ids) from a previous report; see ``RunResult.baseline``."""
+    total_timeout: float | None = None
+    """Seconds for the whole run; cases that would start after it are skipped."""
     connect: Callable[[ServerSpec], Connection] = field(default=connect)
     _liveness_counter: int = field(default=0, init=False)
     _facts: ServerFacts = field(default_factory=lambda: ServerFacts(Era.MODERN), init=False)
+    _deadline: float | None = field(default=None, init=False)
 
     # ------------------------------------------------------------- lifecycle
 
@@ -304,6 +310,8 @@ class Runner:
 
     async def run(self, plan: Sequence[tuple[Suite, Sequence[Case]]]) -> RunResult:
         result = RunResult(seed=self.seed, baseline=self.baseline)
+        if self.total_timeout:
+            self._deadline = asyncio.get_running_loop().time() + self.total_timeout
         self._facts = await self.preflight()
         result.facts = self._facts
         for suite, cases in plan:
@@ -469,8 +477,14 @@ class Runner:
                 if connection is None:
                     results.extend(self._skipped_all(case, down))
                     continue
+                if self._remaining() == 0:
+                    run.out_of_time = True
+                    results.extend(self._skipped_all(case, OUT_OF_TIME))
+                    continue
                 case_connection = connection
                 outcome, fresh = await self._run_case(connection, case, mode)
+                if outcome.status is Status.SKIPPED and outcome.message == OUT_OF_TIME:
+                    run.out_of_time = True
                 saved_from = outcome.evidence or (fresh[-1] if fresh else connection)
                 if not await self.alive(connection):
                     reason = f": {outcome.message}" if outcome.message else ""
@@ -570,15 +584,38 @@ class Runner:
         budget = (
             self.case_timeout * case.timeout_factor + self.startup_timeout * case.fresh_sessions
         )
+        remaining = self._remaining()
+        cut_short = remaining is not None and remaining < budget
         try:
-            async with asyncio.timeout(budget):
+            async with asyncio.timeout(remaining if cut_short else budget):
                 return await case.run(context), fresh
         except (TimeoutError, TransportTimeout):
+            if cut_short and self._remaining() == 0:
+                # The run's time ran out, not the case's: not a finding.
+                return Outcome.skipped(OUT_OF_TIME), fresh
             return Outcome(Status.TIMEOUT, f"no answer within {budget:g}s"), fresh
         except TransportClosed as exc:
             return Outcome(Status.CRASHED, str(exc)), fresh
         except Exception as exc:  # a bug in the check, reported rather than raised
             return Outcome(Status.ERROR, f"{type(exc).__name__}: {exc}"), fresh
+
+    def _remaining(self) -> float | None:
+        """Seconds left of the total timeout (never negative), or None without one."""
+        if self._deadline is None:
+            return None
+        return max(0.0, self._deadline - asyncio.get_running_loop().time())
+
+    async def inventory(self) -> tuple[ServerFacts, list[dict[str, Any]] | str]:
+        """The server's era and its tools, without calling any tool (``--dry-run``)."""
+        self._facts = await self.preflight()
+        mode: Mode = "modern" if self._facts.era.speaks_modern else "legacy"
+        connection = await self._open_ready(mode)
+        if connection is None:
+            return self._facts, "the server could not be reached again after the era probe"
+        try:
+            return self._facts, await self._tools(connection, mode)
+        finally:
+            await connection.close()
 
     def _save(self, case_id: str, connection: Connection) -> str:
         # Named by case id alone so the report stays byte-identical across runs.

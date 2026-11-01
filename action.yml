@@ -1,0 +1,173 @@
+name: MCPProbe MCP server check
+description: >-
+  Conformance, fuzzing, robustness and security checks for an MCP server.
+  Uploads SARIF to code scanning and fails the job on error findings.
+author: Shiwin
+branding:
+  icon: check-circle
+  color: purple
+
+inputs:
+  stdio:
+    description: Command that starts a stdio server, e.g. "node dist/index.js".
+    required: false
+    default: ""
+  http:
+    description: URL of a Streamable HTTP endpoint (the server must already be running).
+    required: false
+    default: ""
+  headers:
+    description: >-
+      HTTP headers, one "Name: value" per line. Pass tokens from secrets, e.g.
+      "Authorization: Bearer ${{ secrets.MCP_TOKEN }}".
+    required: false
+    default: ""
+  env:
+    description: Environment variables for a stdio server, one KEY=VALUE per line. Masked in reports.
+    required: false
+    default: ""
+  suites:
+    description: Comma-separated suites (default conf,fuzz,rob,sec, or [run] suites in mcpprobe.toml).
+    required: false
+    default: ""
+  seed:
+    description: Seed for all randomness. Pin it for reproducible runs.
+    required: false
+    default: ""
+  config:
+    description: Path to a config file (default ./mcpprobe.toml when it exists).
+    required: false
+    default: ""
+  baseline:
+    description: A committed JSON report; only findings not in it fail the job.
+    required: false
+    default: ""
+  args:
+    description: Any other mcpprobe run options, space-separated (e.g. "--allow-destructive --examples 100").
+    required: false
+    default: ""
+  upload-sarif:
+    description: Upload the SARIF report to GitHub code scanning (needs security-events write permission).
+    required: false
+    default: "true"
+  sarif-category:
+    description: Code scanning category, to tell several servers in one repo apart.
+    required: false
+    default: mcpprobe
+  sarif-path:
+    description: Repository file the alerts point at (default the server's entry file, else README.md).
+    required: false
+    default: ""
+  report-dir:
+    description: Where reports and saved cases are written; uploaded as an artifact.
+    required: false
+    default: mcpprobe-report
+  python-version:
+    description: Python used to run MCPProbe (3.11 or later).
+    required: false
+    default: "3.12"
+
+outputs:
+  exit-code:
+    description: "0 passed, 1 error findings, 2 could not run, 3 invalid configuration."
+    value: ${{ steps.probe.outputs.exit-code }}
+  sarif:
+    description: Path of the SARIF report.
+    value: ${{ steps.probe.outputs.sarif }}
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v6
+
+    - id: probe
+      name: Run MCPProbe
+      shell: bash
+      # Inputs reach the script through the environment, never by ${{ }} text
+      # substitution, so a header or command cannot inject shell code.
+      env:
+        IN_STDIO: ${{ inputs.stdio }}
+        IN_HTTP: ${{ inputs.http }}
+        IN_HEADERS: ${{ inputs.headers }}
+        IN_ENV: ${{ inputs.env }}
+        IN_SUITES: ${{ inputs.suites }}
+        IN_SEED: ${{ inputs.seed }}
+        IN_CONFIG: ${{ inputs.config }}
+        IN_BASELINE: ${{ inputs.baseline }}
+        IN_ARGS: ${{ inputs.args }}
+        IN_SARIF_PATH: ${{ inputs.sarif-path }}
+        IN_DIR: ${{ inputs.report-dir }}
+        IN_PYTHON: ${{ inputs.python-version }}
+        ACTION_PATH: ${{ github.action_path }}
+        COLUMNS: "160"  # wide enough that findings are not wrapped in the log
+      run: |
+        mkdir -p "$IN_DIR"
+        args=(run
+          --report json -o "$IN_DIR/probe.json"
+          --report sarif -o "$IN_DIR/probe.sarif"
+          --report junit -o "$IN_DIR/junit.xml"
+          --report html -o "$IN_DIR/report.html"
+          --cases-dir "$IN_DIR/cases")
+        [ -n "$IN_STDIO" ] && args+=(--stdio "$IN_STDIO")
+        [ -n "$IN_HTTP" ] && args+=(--http "$IN_HTTP")
+        while IFS= read -r line; do [ -n "$line" ] && args+=(--header "$line"); done <<< "$IN_HEADERS"
+        while IFS= read -r line; do [ -n "$line" ] && args+=(--env "$line"); done <<< "$IN_ENV"
+        [ -n "$IN_SUITES" ] && args+=(--suites "$IN_SUITES")
+        [ -n "$IN_SEED" ] && args+=(--seed "$IN_SEED")
+        [ -n "$IN_CONFIG" ] && args+=(--config "$IN_CONFIG")
+        [ -n "$IN_BASELINE" ] && args+=(--baseline "$IN_BASELINE")
+        [ -n "$IN_SARIF_PATH" ] && args+=(--sarif-path "$IN_SARIF_PATH")
+        if [ -n "$IN_ARGS" ]; then read -r -a extra <<< "$IN_ARGS"; args+=("${extra[@]}"); fi
+
+        # Install MCPProbe from this action's own checkout, so the tool always
+        # matches the action version (@v1 runs v1's code).
+        set +e
+        uv tool run --quiet --python "$IN_PYTHON" --from "$ACTION_PATH" mcpprobe "${args[@]}" \
+          2> "$IN_DIR/summary.txt"
+        code=$?
+        set -e
+        cat "$IN_DIR/summary.txt" >&2
+
+        {
+          echo "### MCPProbe"
+          echo
+          echo '```'
+          cat "$IN_DIR/summary.txt"
+          echo '```'
+          echo
+          echo "Exit code $code. Full reports are in the \`$IN_DIR\` artifact (open report.html)."
+        } >> "$GITHUB_STEP_SUMMARY"
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        if [ -f "$IN_DIR/probe.sarif" ]; then echo "sarif=$IN_DIR/probe.sarif" >> "$GITHUB_OUTPUT"; fi
+
+    - name: Upload SARIF to code scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' && steps.probe.outputs.sarif != '' }}
+      # Code scanning needs GitHub Advanced Security on private repositories;
+      # without it the upload fails, which must not hide the probe's own result.
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ steps.probe.outputs.sarif }}
+        category: ${{ inputs.sarif-category }}
+
+    - name: Upload reports
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.sarif-category }}-report
+        path: ${{ inputs.report-dir }}
+        if-no-files-found: ignore
+
+    - name: Fail on findings
+      if: ${{ steps.probe.outputs.exit-code != '0' }}
+      shell: bash
+      env:
+        CODE: ${{ steps.probe.outputs.exit-code }}
+      run: |
+        case "$CODE" in
+          1) echo "::error::MCPProbe found error-severity findings (see the job summary)";;
+          2) echo "::error::MCPProbe could not run the server (see the job summary)";;
+          3) echo "::error::MCPProbe configuration is invalid (see the job summary)";;
+          *) echo "::error::MCPProbe exited with $CODE";;
+        esac
+        exit "$CODE"
