@@ -52,7 +52,7 @@ not from the summary line.
 | ROB-001 | warn | every stdio target (12) | Malformed JSON gets no reply at all | JSON-RPC 2.0 defines -32700 Parse error for invalid JSON | **True positive** (both SDKs, as found in M3) |
 | ROB-002 | warn | every stdio target (12) | Envelopes without `jsonrpc`, with a wrong version, etc. get no reply | JSON-RPC 2.0 defines -32600 Invalid Request | **True positive** (both SDKs, as in M3) |
 | ROB-003 | error | calculator, text-editor | Unknown method gets -32602 "Invalid request parameters"; the server's stderr shows it validated the method against its 28 known request types | JSON-RPC 2.0: -32601 is "Method not found"; every request must get a response | **True positive** in the older Python SDK; current Python SDK servers (time, git, fetch, excel) answer -32601 |
-| FUZZ-001 | error | time, git, motherduck, excel (stdio only) | A request containing a lone surrogate (`\ud800`) or 512-deep nesting is never answered; the server keeps answering other requests | Every request must get a response (JSON-RPC 2.0; basic#messages) | **True positive.** The Python SDK's stdio reader drops the whole message, even when the bad value is in an unknown argument; excel over HTTP answers the same inputs |
+| FUZZ-001 (now ROB-008, see below) | error | time, git, motherduck, excel (stdio only) | A request containing a lone surrogate (`\ud800`) or 512-deep nesting is never answered; the server keeps answering other requests | Every request must get a response (JSON-RPC 2.0; basic#messages) | **True positive.** The Python SDK's stdio reader drops the whole message, even when the bad value is in an unknown argument; excel over HTTP answers the same inputs |
 | FUZZ-003 | warn | excel-http, `list_workbooks` | `{"recursive": 0}` (integer for a boolean) is accepted | Invalid input should be rejected with -32602 or `isError` | **True positive** (Pydantic lax coercion) |
 | SEC-004 | warn | everything-http | Port also reachable on the machine's network address | "When running locally, servers **SHOULD** bind only to localhost" (streamable-http#security) | **True positive** (as in M3) |
 | CONF-008 | info | calculator, text-editor, excel, motherduck | Unknown tool gets a tool result with `isError: true` | The spec lists unknown tools as protocol errors | **True positive**, reported as a note only |
@@ -67,14 +67,24 @@ not from the summary line.
 | A server that exits at start-up is reported as "exited with code N at start-up" | It was reported as "did not answer within 5s" (seen with mcp-server-sqlite) |
 | `--total-timeout`: a case cut short by the deadline is "out of time", never a timeout | Windows fires timers up to one clock tick early (seen in CI) |
 
-## Open item (not a false positive)
+## Follow-up: one bug, one finding (D40)
 
-One Python SDK bug (stdio drops a message with deep nesting or a lone
-surrogate) is reported once **per tool** by FUZZ-001: 13 findings on excel,
-7 on git. Each one is true, but they share a root cause. The same situation
-led to D19, which moved non-object arguments to a once-per-server ROB check.
-A once-per-server ROB check for these inputs, with FUZZ no longer using them,
-would report it once. This needs a decision.
+One Python SDK bug (over stdio, a message with deep nesting or a lone
+surrogate is dropped before any tool runs) was reported once **per tool** by
+FUZZ-001: 13 findings on excel, 7 on git. Each was true, but they shared a
+root cause. After the gate, FUZZ stopped generating those two inputs and
+ROB-008 sends each once per server. Rerun with the same seed:
+
+| Target | FUZZ-001 before | After |
+|---|---|---|
+| excel | 13 | 0, plus ROB-008 ×2 |
+| git | 7 | 0, plus ROB-008 ×2 |
+| motherduck | 3 | 0, plus ROB-008 ×2 |
+| time | 1 | 0, plus ROB-008 ×2 |
+| calculator | 0 | ROB-008 ×2 (the older SDK has the same bug; FUZZ had missed it) |
+| everything (stdio and HTTP), excel-http | 0 | 0: they answer these inputs, so ROB-008 passes |
+
+No other finding changed.
 
 ## Reproduce
 

@@ -50,12 +50,15 @@ MODERN_DIALECTS = (
     "https://json-schema.org/draft/2019-09/schema",
 )
 HUGE_STRING: Final = 100_000
-NESTING_DEPTHS: Final = (32, 512)
-"""512 stays under CPython's json recursion limit, so we can always encode it."""
+NESTING_DEPTHS: Final = (32,)
+"""Deep enough to exercise a tool's own handling. Nesting deep enough to trip a
+JSON parser (512) is a property of the whole message, not of a tool, so ROB-008
+sends it once per server instead of once per tool (decision D40)."""
 ODD_STRINGS: Final = (
     "",
     "\x00",
-    "\ud800",  # lone surrogate: valid JSON escape, no UTF-8 form
+    # No lone surrogate ("\ud800"): it breaks strict JSON parsers before any
+    # tool runs, so ROB-008 sends it once per server (decision D40).
     "‮evil.exe",  # right-to-left override
     "\U0001f469‍\U0001f4bb",  # ZWJ emoji sequence
     "é́́",  # stacked combining marks

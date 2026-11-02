@@ -3,8 +3,8 @@
 Tells an MCP server author, in one run, whether their server is spec-compliant,
 robust to bad input, and usable by a real model.
 
-> **Status: v0.3.0, pre-alpha.** Conformance (CONF), schema fuzzing (FUZZ)
-> and robustness (ROB) suites over stdio and Streamable HTTP, for the
+> **Status: v1.0.0.** Conformance (CONF), schema fuzzing (FUZZ), robustness
+> (ROB) and security (SEC) suites over stdio and Streamable HTTP, for the
 > stateless **2026-07-28** revision *and* the legacy `initialize` era
 > (2025-11-25, 2025-06-18). Each server is classified as modern, legacy,
 > dual-era or unknown, and only the checks for the era(s) it speaks run.
@@ -17,14 +17,11 @@ byte-for-byte replayable case, and the same seed always gives the same report.
 Requires Python 3.11+. No compiler needed on any platform.
 
 ```bash
-pipx install git+https://github.com/boyndasouth/MCPProbe@v0.3.0
-# or, inside a project
-uv add git+https://github.com/boyndasouth/MCPProbe@v0.3.0
+pipx install mcpprobe-kit        # or: uv tool install mcpprobe-kit
 ```
 
-From v1.0 it will be on PyPI as **`mcpprobe-kit`** (`pipx install mcpprobe-kit`);
-the command stays `mcpprobe`. (PyPI treats "mcpprobe" as too similar to an
-unrelated existing project, "mcp-probe".)
+The package is **`mcpprobe-kit`**; the command is `mcpprobe`. (PyPI refuses
+"mcpprobe" and "mcpprobe-cli" as too similar to unrelated existing projects.)
 
 Full documentation: **https://boyndasouth.github.io/MCPProbe/** (quickstart,
 CI recipes, configuration, the check catalog).
@@ -174,6 +171,7 @@ flags a deprecated feature; `info` is advice and shows as a note.
 | ROB-005 | error | both | 1 MB and 10 MB requests are answered or rejected, never dropped |
 | ROB-006 | error | both | Cancellation is handled gracefully |
 | ROB-007 | error | both | Concurrent requests each get their own response |
+| ROB-008 | error | both | Deeply nested or invalid-Unicode requests are answered or rejected, never dropped |
 | SEC-001 | warn | both | Tool schemas do not depend on a network `$ref` |
 | SEC-002 | warn | both | Errors carry no stack traces |
 | SEC-003 | warn | both | Responses carry no secrets (`--env` values, credential-shaped strings) |
@@ -263,7 +261,7 @@ every saved recording; pass them again to `replay`.
 | M1 (done, v0.1.0) | Conformance checks for 2026-07-28, JSON report |
 | M2 (done, v0.2.0) | Legacy and dual-era detection and checks |
 | M3 (done, v0.3.0) | Schema fuzzing (FUZZ) and robustness (ROB) suites |
-| M4 | Security suite, SARIF/JUnit/HTML reports, GitHub Action, `--baseline` |
+| M4 (done, v1.0.0) | Security suite, SARIF/JUnit/HTML reports, GitHub Action, `--baseline`, config file, docs site; checked on 12 public servers |
 | M5 | Model-in-the-loop usability evaluation (EVAL, opt-in) |
 
 ## Development

@@ -20,6 +20,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -66,6 +67,7 @@ BREAKS = {
     "ROB-005": "messages over 2 MB are dropped without an answer",
     "ROB-006": "notifications/cancelled is answered with an error",
     "ROB-007": "unknown-method errors carry the id of the previous request",
+    "ROB-008": "messages nested over 100 deep or holding a lone surrogate are dropped",
     "SEC-001": "weather's inputSchema uses a $ref to a schema on the network",
     "SEC-002": "tool errors for invalid arguments include a Python traceback",
     "SEC-003": "the unknown-tool error leaks an AWS-style key and $MCPPROBE_FIXTURE_TOKEN",
@@ -452,6 +454,8 @@ class Server:
         """Process one message. Returns (HTTP status, response or None, new session id)."""
         if "ROB-005" in self.breaks and len(raw) > MAX_MESSAGE:
             raise Drop
+        if "ROB-008" in self.breaks and _hostile(raw):
+            raise Drop  # like a JSON parser with a depth limit and strict Unicode
         try:
             message = json.loads(raw)
         except ValueError:
@@ -510,6 +514,20 @@ def _dump(obj: dict[str, Any]) -> bytes:
 
 
 # ------------------------------------------------------------------ stdio
+
+
+def _hostile(raw: bytes) -> bool:
+    """Nested over 100 deep, or a lone surrogate escape anywhere in the message."""
+    if re.search(rb"\\u[dD][89abAB][0-9a-fA-F]{2}(?!\\u[dD][c-fC-F])", raw):
+        return True
+    depth = deepest = 0
+    for byte in raw:
+        if byte in b"[{":
+            depth += 1
+            deepest = max(deepest, depth)
+        elif byte in b"]}":
+            depth -= 1
+    return deepest > 100
 
 
 def serve_stdio(server: Server) -> None:

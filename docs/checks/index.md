@@ -50,6 +50,7 @@ Every check cites the section of the MCP specification it enforces. `error` chec
 | [ROB-005](ROB-005.md) | error | both eras, stdio, http | 1 MB and 10 MB requests are answered or rejected, never dropped |
 | [ROB-006](ROB-006.md) | error | both eras, stdio, http | Cancellation is handled gracefully |
 | [ROB-007](ROB-007.md) | error | both eras, stdio, http | Concurrent requests each get their own response |
+| [ROB-008](ROB-008.md) | error | both eras, stdio, http | Deeply nested or invalid-Unicode requests are answered or rejected, never dropped |
 
 ## Security (SEC)
 

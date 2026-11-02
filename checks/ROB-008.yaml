@@ -1,0 +1,13 @@
+id: ROB-008
+title: Deeply nested or invalid-Unicode requests are answered or rejected, never dropped
+severity: error
+era: both
+spec_ref: https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages
+description: 'Sends a tools/list request with a value nested 512 deep, then one with a lone
+  surrogate escape (\ud800), each under a vendor-prefixed _meta key (com.mcpprobe/hostile) that
+  servers must not interpret (https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta).
+  All messages MUST follow JSON-RPC 2.0, which requires a response to every request; a server
+  whose JSON parser refuses such a message should answer with an error (-32700 or -32600), not
+  drop it. Any result or JSON-RPC error passes, as does an HTTP 4xx. FUZZ does not generate these
+  inputs, so a parser that drops them is reported once per server, not once per tool. Runs once
+  per server.'

@@ -96,3 +96,19 @@ async def test_same_seed_same_report(tmp_path: Path, http_fixture: Any) -> None:
     first = await run_rob(spec, Transport.HTTP, tmp_path / "a", seed=3)
     second = await run_rob(spec, Transport.HTTP, tmp_path / "b", seed=3)
     assert dumps(first, spec) == dumps(second, spec)
+
+
+@pytest.mark.parametrize("transport", [Transport.STDIO, Transport.HTTP])
+async def test_rob_008_reports_a_dropped_request_as_dropped(
+    transport: Transport, tmp_path: Path, http_fixture: Any
+) -> None:
+    # The case must end on its own verdict, not on the runner's case timeout,
+    # so the report says what happened instead of a bare "no answer".
+    spec = _spec(transport, http_fixture, ("ROB-008",))
+    result = await run_rob(spec, transport, tmp_path)
+    cases = [r for r in result.results if r.case_id.startswith("ROB-008")]
+    assert {r.case_id: r.status for r in cases} == {
+        "ROB-008/deep-nesting": Status.FAILED,
+        "ROB-008/lone-surrogate": Status.FAILED,
+    }
+    assert all("should be answered" in r.message for r in cases)

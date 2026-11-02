@@ -3,7 +3,7 @@
 # mcpprobe-kit because PyPI rejects "mcpprobe" (too similar to "mcp-probe") and
 # "mcpprobe-cli" (too similar to "mcp-probe-cli").
 name = "mcpprobe-kit"
-version = "0.3.0"
+version = "1.0.0"
 description = "Conformance checker, schema fuzzer and tool-usability evaluator for MCP servers"
 readme = "README.md"
 license = "MIT"
@@ -13,7 +13,7 @@ authors = [{ name = "Shiwin" }]
 requires-python = ">=3.11"
 keywords = ["mcp", "model-context-protocol", "conformance", "fuzzing", "testing"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",

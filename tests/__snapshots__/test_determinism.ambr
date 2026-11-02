@@ -20,7 +20,7 @@
     "exit_code": 1,
     "baseline": null,
     "summary": {
-      "passed": 40,
+      "passed": 42,
       "failed": 5,
       "crashed": 1,
       "timeout": 0,
@@ -285,7 +285,7 @@
         "suite": "FUZZ",
         "severity": "error",
         "status": "passed",
-        "message": "35 calls (1 with valid arguments, 34 invalid)",
+        "message": "33 calls (1 with valid arguments, 32 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
         "repro": null,
         "baselined": false
@@ -295,7 +295,7 @@
         "suite": "FUZZ",
         "severity": "error",
         "status": "passed",
-        "message": "50 calls (4 with valid arguments, 46 invalid)",
+        "message": "46 calls (4 with valid arguments, 42 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
         "repro": null,
         "baselined": false
@@ -325,7 +325,7 @@
         "suite": "FUZZ",
         "severity": "error",
         "status": "passed",
-        "message": "5 calls (3 with valid arguments, 2 invalid); stopped early at the FUZZ-001 finding, so later inputs went untested",
+        "message": "6 calls (4 with valid arguments, 2 invalid); stopped early at the FUZZ-001 finding, so later inputs went untested",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
         "repro": null,
         "baselined": false
@@ -335,7 +335,7 @@
         "suite": "FUZZ",
         "severity": "error",
         "status": "passed",
-        "message": "35 calls (1 with valid arguments, 34 invalid)",
+        "message": "33 calls (1 with valid arguments, 32 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
         "repro": null,
         "baselined": false
@@ -345,7 +345,7 @@
         "suite": "FUZZ",
         "severity": "error",
         "status": "passed",
-        "message": "50 calls (4 with valid arguments, 46 invalid)",
+        "message": "46 calls (4 with valid arguments, 42 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling",
         "repro": null,
         "baselined": false
@@ -375,7 +375,7 @@
         "suite": "FUZZ",
         "severity": "warn",
         "status": "passed",
-        "message": "5 calls (3 with valid arguments, 2 invalid); stopped early at the FUZZ-001 finding, so later inputs went untested",
+        "message": "6 calls (4 with valid arguments, 2 invalid); stopped early at the FUZZ-001 finding, so later inputs went untested",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
         "repro": null,
         "baselined": false
@@ -385,7 +385,7 @@
         "suite": "FUZZ",
         "severity": "warn",
         "status": "passed",
-        "message": "35 calls (1 with valid arguments, 34 invalid)",
+        "message": "33 calls (1 with valid arguments, 32 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
         "repro": null,
         "baselined": false
@@ -395,7 +395,7 @@
         "suite": "FUZZ",
         "severity": "warn",
         "status": "passed",
-        "message": "50 calls (4 with valid arguments, 46 invalid)",
+        "message": "46 calls (4 with valid arguments, 42 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#security-considerations",
         "repro": null,
         "baselined": false
@@ -435,7 +435,7 @@
         "suite": "FUZZ",
         "severity": "warn",
         "status": "passed",
-        "message": "35 calls (1 with valid arguments, 34 invalid)",
+        "message": "33 calls (1 with valid arguments, 32 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
         "repro": null,
         "baselined": false
@@ -445,7 +445,7 @@
         "suite": "FUZZ",
         "severity": "warn",
         "status": "passed",
-        "message": "50 calls (4 with valid arguments, 46 invalid)",
+        "message": "46 calls (4 with valid arguments, 42 invalid)",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool",
         "repro": null,
         "baselined": false
@@ -527,6 +527,26 @@
         "status": "passed",
         "message": "",
         "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#responses",
+        "repro": null,
+        "baselined": false
+      },
+      {
+        "id": "ROB-008/deep-nesting",
+        "suite": "ROB",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
+        "repro": null,
+        "baselined": false
+      },
+      {
+        "id": "ROB-008/lone-surrogate",
+        "suite": "ROB",
+        "severity": "error",
+        "status": "passed",
+        "message": "",
+        "spec_ref": "https://modelcontextprotocol.io/specification/2026-07-28/basic/index#messages",
         "repro": null,
         "baselined": false
       },

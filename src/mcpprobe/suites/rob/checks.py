@@ -16,6 +16,8 @@ judge the answer:
   answered, and the server keeps working.
 - ROB-007 (error): concurrent requests (``--concurrency``, default 8) each get
   their own response.
+- ROB-008 (error): a request nested 512 deep, or holding a lone surrogate, is
+  answered or rejected, never dropped.
 
 Request bodies are sent byte for byte through the wire client, so the saved
 case replays exactly what was sent.
@@ -288,6 +290,39 @@ def rob_005(size: str) -> Callable[[CaseContext], Awaitable[Outcome]]:
     return run
 
 
+# ------------------------------------------------------------------ ROB-008
+
+DEEP_NESTING: Final = 512
+"""Under CPython's json recursion limit, so it can always be encoded."""
+HOSTILE_VALUES: Final = {"deep-nesting": "512-deep nesting", "lone-surrogate": "a lone surrogate"}
+HOSTILE_KEY: Final = "com.mcpprobe/hostile"
+
+
+def _hostile_value(variant: str) -> Any:
+    if variant == "lone-surrogate":
+        return "\ud800"  # a valid JSON escape with no UTF-8 form
+    value: Any = "mcpprobe"
+    for _ in range(DEEP_NESTING):
+        value = [value]
+    return value
+
+
+def rob_008(variant: str) -> Callable[[CaseContext], Awaitable[Outcome]]:
+    async def run(ctx: CaseContext) -> Outcome:
+        message = era_request(ctx, "tools/list", f"rob-008-{variant}")
+        params = message["params"] = dict(message.get("params") or {})
+        params["_meta"] = {**params.get("_meta", {}), HOSTILE_KEY: _hostile_value(variant)}
+        answer = await send_raw(ctx, encode(message), ctx.timeout)
+        if answer.first is not None or _rejected(answer):
+            return Outcome.passed()
+        return Outcome.failed(
+            f"a tools/list request with {HOSTILE_VALUES[variant]} in a vendor _meta key got "
+            f"{answer.describe()}; it should be answered, or rejected with an error"
+        )
+
+    return run
+
+
 # ------------------------------------------------------------------ ROB-006
 
 
@@ -435,5 +470,6 @@ CASES: list[CaseSpec] = [
     ("ROB-006", "stdio", rob_006_stdio, STDIO),
     ("ROB-006", "disconnect", rob_006_http, HTTP),
     ("ROB-007", "", rob_007, BOTH),
+    *[("ROB-008", variant, rob_008(variant), BOTH) for variant in HOSTILE_VALUES],
 ]
-TIMEOUT_FACTORS: Final = {"ROB-005": 3.0, "ROB-007": 2.0}
+TIMEOUT_FACTORS: Final = {"ROB-005": 3.0, "ROB-007": 2.0, "ROB-008": 2.0}

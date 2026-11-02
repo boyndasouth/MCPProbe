@@ -8,9 +8,17 @@ versioned and never silently reused.
 
 ## [Unreleased]
 
-Milestone M4: reports, baseline mode and the SEC suite.
+## [1.0.0] - 2026-11-01
+
+Milestone M4: the security suite, SARIF/JUnit/HTML reports, baseline mode,
+the config file, the GitHub Action, the docs site and PyPI releases. Checked
+on 12 public MCP servers with every finding reviewed by hand
+(`docs/gate-m4.md`). From 1.0, check IDs, exit codes and the report format
+follow semantic versioning.
 
 ### Added
+- ROB-008 (error): a request nested 512 deep or holding a lone surrogate is
+  answered or rejected, never dropped.
 - `--report junit`: one test case per case; findings that fail the run are
   `<failure>`s, warnings and notes are in `<system-out>`.
 - `--report sarif`: SARIF 2.1.0 for GitHub code scanning, with one rule per
@@ -47,6 +55,9 @@ Milestone M4: reports, baseline mode and the SEC suite.
   build-provenance attestations on PyPI and GitHub.
 
 ### Changed
+- FUZZ no longer generates 512-deep nesting or lone surrogates. They break a
+  server's JSON parser before any tool runs, so one bug was reported once per
+  tool; ROB-008 now checks them once per server.
 - CONF-006: a dual-era server may refuse a request whose MCP-Protocol-Version
   header names a legacy revision with any HTTP 400 (it may treat the request
   as legacy); modern-only servers still need -32020.
@@ -188,7 +199,8 @@ reports and byte-for-byte replay of every failure.
 - Request metadata header helper for 2026-07-28 (`Mcp-Method`, `Mcp-Name`,
   Base64 sentinel encoding).
 
-[Unreleased]: https://github.com/boyndasouth/MCPProbe/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/boyndasouth/MCPProbe/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v1.0.0
 [0.3.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v0.3.0
 [0.2.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v0.2.0
 [0.1.0]: https://github.com/boyndasouth/MCPProbe/releases/tag/v0.1.0
